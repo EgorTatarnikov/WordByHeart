@@ -1,0 +1,26 @@
+language: en
+paths:
+  work: ../data/work/demo_en
+  cache: ../data/cache
+  output: ../data/output/demo_en
+nlp:
+  model: en_core_web_trf
+  batch_size: 4
+  chunk_size: 5000
+pronunciation:
+  enabled: true
+  language: en-gb
+translation:
+  enabled: false
+  provider: openai
+  model: gpt-5.6-luna
+  cumulative_coverage_limit: 90
+  specificity_threshold: 10
+  min_book_occurrences: 4
+cards:
+  enabled: true
+  template: ../table.docx
+  output_filename: english_cards.docx
+known_dictionary:
+  enabled: false
+  path: ../my_dictionary_en.xlsx

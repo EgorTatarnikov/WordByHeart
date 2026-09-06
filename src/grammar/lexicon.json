@@ -1,0 +1,50 @@
+{
+  "nouns": {
+    "agua": {"gender": "Fem", "singular_article": "el", "plural": "aguas"},
+    "águila": {"gender": "Fem", "singular_article": "el", "plural": "águilas"},
+    "alma": {"gender": "Fem", "singular_article": "el", "plural": "almas"},
+    "arma": {"gender": "Fem", "singular_article": "el", "plural": "armas"},
+    "hambre": {"gender": "Fem", "singular_article": "el", "plural": null},
+    "hacha": {"gender": "Fem", "singular_article": "el", "plural": "hachas"},
+    "día": {"gender": "Masc", "plural": "días"},
+    "mano": {"gender": "Fem", "plural": "manos"},
+    "problema": {"gender": "Masc", "plural": "problemas"},
+    "mapa": {"gender": "Masc", "plural": "mapas"},
+    "régimen": {"plural": "regímenes"},
+    "carácter": {"plural": "caracteres"},
+    "lápiz": {"plural": "lápices"},
+    "joven": {"plural": "jóvenes"},
+    "examen": {"plural": "exámenes"},
+    "mes": {"plural": "meses"},
+    "país": {"plural": "países"},
+    "lunes": {"plural": "lunes"},
+    "crisis": {"plural": "crisis"},
+    "tijeras": {"plural_only": true}
+  },
+  "adjectives": {
+    "pequeño": ["pequeño", "pequeña", "pequeños", "pequeñas"],
+    "pequeña": ["pequeño", "pequeña", "pequeños", "pequeñas"],
+    "bonito": ["bonito", "bonita", "bonitos", "bonitas"],
+    "bonita": ["bonito", "bonita", "bonitos", "bonitas"],
+    "bueno": ["bueno", "buena", "buenos", "buenas"],
+    "malo": ["malo", "mala", "malos", "malas"],
+    "grande": ["grande", "grandes"],
+    "interesante": ["interesante", "interesantes"],
+    "feliz": ["feliz", "felices"],
+    "capaz": ["capaz", "capaces"],
+    "joven": ["joven", "jóvenes"],
+    "español": ["español", "española", "españoles", "españolas"],
+    "francés": ["francés", "francesa", "franceses", "francesas"],
+    "trabajador": ["trabajador", "trabajadora", "trabajadores", "trabajadoras"],
+    "mejor": ["mejor", "mejores"],
+    "peor": ["peor", "peores"]
+  },
+  "verbs": {
+    "hablar": "regular", "cantar": "regular", "comer": "regular", "vivir": "regular",
+    "tener": "irregular", "venir": "irregular", "ser": "irregular", "estar": "irregular",
+    "haber": "irregular", "ir": "irregular", "hacer": "irregular", "decir": "irregular",
+    "poder": "irregular", "querer": "irregular", "saber": "irregular", "dar": "irregular",
+    "ver": "irregular", "poner": "irregular", "salir": "irregular", "oír": "irregular",
+    "dormir": "irregular", "pedir": "irregular", "escribir": "irregular"
+  }
+}

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "word-by-heart"
+version = "0.1.0"
+description = "Restartable multilingual learning dictionary pipeline"
+requires-python = ">=3.11"
+dependencies = ["spacy>=3.8,<3.9", "pandas>=2.2,<3", "pyarrow>=15", "openpyxl>=3.1", "python-docx>=1.1,<2", "phonemizer>=3.4,<4", "wordfreq>=3.1,<4", "openai>=1.68,<3", "python-dotenv>=1", "pydantic>=2.7,<3", "tqdm>=4.66", "PyYAML>=6", "filelock>=3.13"]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "ruff>=0.9"]
+transformer = ["spacy-curated-transformers>=0.2.2,<1"]
+
+[project.scripts]
+word-by-heart = "src.main:main"
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.setuptools.package-data]
+"src.grammar" = ["*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: requires an installed spaCy model"]
+
+[tool.ruff]
+line-length = 110
