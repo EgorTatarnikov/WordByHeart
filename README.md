@@ -1,4 +1,4 @@
-# <img src="https://raw.githubusercontent.com/EgorTatarnikov/WordByHeart/main/src/logo/WordByHeart_v2.svg" width="32" height="32" alt="wt badge"> Word by Heart
+# <img align="absbottom"  src="https://raw.githubusercontent.com/EgorTatarnikov/WordByHeart/main/src/logo/WordByHeart_v3.svg" width="32" height="32"> Word by Heart
 
 Приложение для подготовки лексики к изучению, необходимой для прочтения конкретной книги или просмотра сериала на иностранном языке.
 
