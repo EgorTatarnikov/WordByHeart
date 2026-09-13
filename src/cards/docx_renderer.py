@@ -10,6 +10,7 @@ from docx.oxml import OxmlElement
 from docx.shared import Pt
 
 from src.cards.formatter import (
+    card_content,
     english_back_forms,
     filter_observed_forms_for_back,
     format_observed_forms,
@@ -114,9 +115,7 @@ def render(cards, template: Path, target: Path, config, language="es") -> int:
         sheet, local = divmod(index, config.cards_per_page)
         row, column = divmod(local, config.columns)
         front = tables[sheet].cell(row, column)
-        front_text = (
-            entry.learning_form.strip() or entry.lemma if language == "en" else get_card_front_text(entry)
-        )
+        front_text, ipa_text, translations, forms_text = card_content(entry, config.max_forms, language)
         if front_text == entry.lemma:
             lemma_fallbacks.append(f"{entry.lemma}/{entry.pos}")
         _write_paragraph(_clear_cell(front), front_text, config.front_font_size, 0)
@@ -125,36 +124,19 @@ def render(cards, template: Path, target: Path, config, language="es") -> int:
         back_row, back_column = back_position(row, column, config.rows)
         back = back_table.cell(back_row, back_column)
         paragraph = _clear_cell(back)
-        forms = (
-            english_back_forms(entry, config.max_forms)
-            if language == "en"
-            else filter_observed_forms_for_back(entry.observed_forms, front_text, config.max_forms, True)
-        )
-        forms_text = format_observed_forms(forms)
-        blocks = [
-            (f"/{entry.ipa}/", config.back_font_size),
+        blocks = [(ipa_text, config.back_font_size)]
+        blocks.extend(
             (
-                entry.translation_ru,
+                translation,
                 get_translation_font_size(
-                    entry.translation_ru,
+                    translation,
                     config.back_font_size,
                     config.long_translation_threshold,
                     config.long_translation_font_size,
                 ),
-            ),
-        ]
-        if language == "es":
-            blocks.append(
-                (
-                    entry.translation_en,
-                    get_translation_font_size(
-                        entry.translation_en,
-                        config.back_font_size,
-                        config.long_translation_threshold,
-                        config.long_translation_font_size,
-                    ),
-                )
             )
+            for translation in translations
+        )
         if forms_text:
             blocks.append(
                 (
@@ -195,6 +177,11 @@ def run(paths, template, target, cards_config, translation_config, language="es"
         known_words,
     )
     sheets = render(cards, template, target, cards_config, language)
+    from src.cards.learning_list import list_filename, render_learning_list
+
+    list_target = target.parent / list_filename(language)
+    render_learning_list(cards, list_target, cards_config, language)
+    logger.info("Список для изучения: %s", list_target)
     long_forms = sum(
         len(
             format_observed_forms(

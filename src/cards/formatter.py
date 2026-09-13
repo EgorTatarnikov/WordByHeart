@@ -94,3 +94,17 @@ def get_forms_font_size(text: str, normal_size: int, threshold: int, reduced_siz
 
 def get_translation_font_size(text: str, normal_size: int, threshold: int, reduced_size: int) -> int:
     return reduced_size if len(text) > threshold else normal_size
+
+
+def card_content(entry, max_forms=10, language="es"):
+    """Shared visible content for printable cards and the learning spreadsheet."""
+    front = entry.learning_form.strip() or entry.lemma if language == "en" else get_card_front_text(entry)
+    forms = (
+        english_back_forms(entry, max_forms)
+        if language == "en"
+        else filter_observed_forms_for_back(entry.observed_forms, front, max_forms, True)
+    )
+    translations = [entry.translation_ru]
+    if language == "es":
+        translations.append(entry.translation_en)
+    return front, f"/{entry.ipa}/", translations, format_observed_forms(forms)

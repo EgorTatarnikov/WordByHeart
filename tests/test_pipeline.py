@@ -153,9 +153,11 @@ def test_excel_csv_and_manifest(project):
         assert sheet["A1"].alignment.wrap_text
     sheet = book["Леммы"]
     assert sheet["D2"].data_type == "n"
-    assert sheet["E2"].number_format == "0.00%"
-    assert sheet["F2"].value > 0
-    assert sheet["R2"].value is None  # Disabled translation stays blank.
+    assert sheet["E2"].number_format == "#,##0"
+    assert sheet["F2"].number_format == "0.00%"
+    assert sheet["G2"].value > 0
+    columns = {cell.value: cell.column for cell in sheet[1]}
+    assert sheet.cell(2, columns["Перевод на русский"]).value is None
     book.close()
     assert (pipeline.output / "lemmas.csv").read_text(encoding="utf-8").startswith("Ранг,Лемма")
     manifest = json.loads((pipeline.work / "manifest.json").read_text(encoding="utf-8"))

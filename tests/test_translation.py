@@ -116,8 +116,8 @@ def test_selection_default_exact_boundary_and_crossing():
     assert exact.eligible_lemma_ids == {"lemma-a", "lemma-b", "lemma-c"}
     assert exact.eligible_form_ids == {"form-a", "form-b", "form-c"}
     assert exact.actual_coverage == pytest.approx(0.9)
-    lemmas[1]["cumulative_coverage"] = 0.898
-    lemmas[2]["cumulative_coverage"] = 0.902
+    for row, count in zip(lemmas, [500, 300, 102, 98]):
+        row["count"] = count
     crossing = select_lemmas_by_cumulative_coverage(lemmas, forms, 90)
     assert crossing.eligible_lemma_ids == {"lemma-a", "lemma-b", "lemma-c"}
     assert crossing.actual_coverage == pytest.approx(0.902)
@@ -271,7 +271,9 @@ def test_export_tables_keep_entries_outside_translation_coverage(tmp_path):
     assert len(tables[0][2]) == len(lemmas)
     assert len(tables[1][2]) == len(forms)
     rare_lemma_row = next(row for row in tables[0][2] if row[1] == "d")
-    assert rare_lemma_row[14:16] == ["", ""]
+    assert all(
+        rare_lemma_row[tables[0][1].index(header)] == "" for header in ("Группа спряжения", "Регулярность")
+    )
 
 
 @pytest.mark.parametrize(

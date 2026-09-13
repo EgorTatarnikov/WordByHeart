@@ -34,7 +34,7 @@ CODE_PATHS = {
     "postprocess": ["postprocessing"],
     "validate": ["validation", "grammar/pos_mapping.py"],
     "export": ["export", "grammar/pos_mapping.py"],
-    "cards": ["cards", "translation/selection.py"],
+    "cards": ["cards", "translation/selection.py", "export"],
 }
 PACKAGES = {
     "preprocess": [],
@@ -54,7 +54,7 @@ PACKAGES = {
     "postprocess": [],
     "validate": [],
     "export": ["openpyxl"],
-    "cards": ["python-docx"],
+    "cards": ["python-docx", "openpyxl"],
 }
 
 
@@ -87,8 +87,15 @@ class Pipeline:
             self.outputs["export"].append(self.output / self.profile.export_filename)
         if self.config.export.csv:
             self.outputs["export"].extend(self.output / name for name in ("lemmas.csv", "forms.csv"))
+        from src.cards.learning_list import list_filename
+
         self.outputs["cards"] = (
-            [self.output / self.config.cards.output_filename] if self.config.cards.enabled else []
+            [
+                self.output / self.config.cards.output_filename,
+                self.output / list_filename(self.config.language),
+            ]
+            if self.config.cards.enabled
+            else []
         )
 
     def resolve(self, name):
@@ -154,7 +161,9 @@ class Pipeline:
         root = Path(__file__).parent
         fingerprints = {}
         for stage, paths in CODE_PATHS.items():
-            files = [root / f for f in ("models.py", "storage.py", "pipeline.py", "manifest.py")]
+            files = [
+                root / f for f in ("models.py", "storage.py", "pipeline.py", "manifest.py", "lemma_groups.py")
+            ]
             for path in paths:
                 full = root / path
                 files.extend(

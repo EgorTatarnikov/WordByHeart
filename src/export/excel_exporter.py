@@ -7,7 +7,9 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
+from src.export.review import REVIEW_COLUMNS, make_review_rows
 from src.grammar.pos_mapping import POS_RU
+from src.lemma_groups import group_lemmas
 from src.storage import atomic_path, read_rows
 
 logger = logging.getLogger(__name__)
@@ -17,11 +19,13 @@ LEMMA_COLUMNS = [
     "Лемма",
     "Учебная форма",
     "Суммарное число вхождений",
+    "Всего вхождений леммы",
     "Доля от всех слов",
     "Кумулятивное покрытие",
     "Относительная частота в книге",
     "Частота Wordfreq",
     "Специфичность",
+    "Количество контекстных блоков",
     "Транскрипция",
     "Часть речи",
     "Род",
@@ -33,7 +37,6 @@ LEMMA_COLUMNS = [
     "Перевод на русский",
     "Перевод на английский",
     "Пример из книги",
-    "Количество контекстных блоков",
 ]
 FORM_COLUMNS = [
     "Ранг",
@@ -49,7 +52,6 @@ FORM_COLUMNS = [
     "Перевод на английский",
     "Пример из книги",
 ]
-REVIEW_COLUMNS = ["ID", "Категория", "Уровень", "Описание", "Запись", "Лемма", "POS"]
 
 
 def make_tables(data):
@@ -58,20 +60,25 @@ def make_tables(data):
     ipa = {r["text"]: f"/{r['ipa']}/" if r["ipa"] else "" for r in data["ipa"]}
     tr = {r["id"]: r for r in data["translations"]}
     lemma_rows, form_rows = [], []
-    for r in sorted(data["lemmas"], key=lambda r: (-r["count"], r["lemma"], r["pos"])):
+    groups = group_lemmas(data["lemmas"], data["forms"])
+    group_by_lemma = {g["lemma"]: g for g in groups}
+    for r in [row for group in groups for row in group["rows"]]:
+        group = group_by_lemma[r["lemma"]]
         g, t = lg[r["id"]], tr[r["id"]]
         observed = sorted(r["observed_forms"].items(), key=lambda x: (-x[1], x[0]))
         lemma_rows.append(
             [
-                r["rank"],
+                group["rank"],
                 r["lemma"],
                 g["learning_form"],
                 r["count"],
-                r["share"],
-                r["cumulative_coverage"],
-                r.get("book_relative_frequency", r["share"]),
-                r.get("reference_frequency", 0.0),
-                r.get("specificity", 0.0),
+                group["count"],
+                group["share"],
+                group["cumulative_coverage"],
+                group["share"],
+                group["reference_frequency"],
+                group["specificity"],
+                r["chunk_count"],
                 ipa.get(r["lemma"], ""),
                 POS_RU.get(r["pos"], r["pos"]),
                 g["grammatical_gender"],
@@ -83,7 +90,6 @@ def make_tables(data):
                 t["ru"],
                 t["en"],
                 r["contexts"][0] if r["contexts"] else "",
-                r["chunk_count"],
             ]
         )
     for r in sorted(data["forms"], key=lambda r: (-r["count"], r["form"], r["lemma"], r["pos"])):
@@ -104,21 +110,7 @@ def make_tables(data):
                 r["contexts"][0] if r["contexts"] else "",
             ]
         )
-    entries = {r["id"]: r for r in data["lemmas"] + data["forms"]}
-    review_rows = []
-    for r in data["validation"]:
-        entry = entries.get(r["id"], {})
-        review_rows.append(
-            [
-                r["id"],
-                r["category"],
-                r["severity"],
-                r["message"],
-                entry.get("form", entry.get("lemma", "")),
-                entry.get("lemma", ""),
-                entry.get("pos", ""),
-            ]
-        )
+    review_rows = make_review_rows(data)
     return [
         ("Леммы", LEMMA_COLUMNS, lemma_rows),
         ("Словоформы", FORM_COLUMNS, form_rows),
@@ -139,12 +131,44 @@ def clean(value):
     return value
 
 
-def write_excel(target, tables, config):
+EN_OPTIONAL_COLUMNS = {"Род", "Группа спряжения", "Регулярность", "Перевод на английский"}
+EN_WIDTHS_PX = {
+    "Ранг": 38,
+    **dict.fromkeys(["Лемма", "Учебная форма", "Транскрипция", "Часть речи"], 180),
+    **dict.fromkeys(
+        [
+            "Суммарное число вхождений",
+            "Всего вхождений леммы",
+            "Доля от всех слов",
+            "Кумулятивное покрытие",
+            "Относительная частота в книге",
+            "Частота Wordfreq",
+            "Специфичность",
+            "Количество контекстных блоков",
+        ],
+        120,
+    ),
+}
+
+
+def english_columns(headers, rows):
+    """Drop only optional empty display columns; preserve data and shared schemas."""
+    keep = [
+        i
+        for i, header in enumerate(headers)
+        if header not in EN_OPTIONAL_COLUMNS or any(str(clean(row[i])).strip() for row in rows)
+    ]
+    return [headers[i] for i in keep], [[row[i] for i in keep] for row in rows]
+
+
+def write_excel(target, tables, config, language=None):
     book = Workbook()
     book.remove(book.active)
     for name, headers, rows in tables:
         if len(rows) > 1048575:
             raise ValueError(f"{name}: превышен лимит строк Excel")
+        if language == "en" and name in {"Леммы", "Словоформы"}:
+            headers, rows = english_columns(headers, rows)
         sheet = book.create_sheet(name)
         sheet.append(headers)
         widths = []
@@ -154,9 +178,19 @@ def write_excel(target, tables, config):
                 if "Пример" in header
                 else 48
                 if header
-                in {"Словоформы в книге", "Грамматические формы", "Грамматические признаки", "Описание"}
+                in {
+                    "Словоформы в книге",
+                    "Грамматические формы",
+                    "Грамматические признаки",
+                    "Описание",
+                    "Что проверить",
+                    "Что сделать",
+                }
                 else 26
             )
+            if language == "en" and name in {"Леммы", "Словоформы"} and header in EN_WIDTHS_PX:
+                # Calibri 11: approximately seven pixels per character plus five pixels padding.
+                width = (EN_WIDTHS_PX[header] - 5) / 7
             widths.append(width)
             sheet.column_dimensions[get_column_letter(col)].width = width
         for values in rows:
@@ -187,7 +221,10 @@ def write_excel(target, tables, config):
                     "Относительная частота в книге",
                 }:
                     cell.number_format = "0.00%"
-                elif headers[cell.column - 1] in {"Частота Wordfreq", "Специфичность"}:
+                elif headers[cell.column - 1] in {
+                    "Частота Wordfreq",
+                    "Специфичность",
+                }:
                     cell.number_format = "0.000000"
                 elif isinstance(cell.value, int):
                     cell.number_format = "#,##0"
@@ -205,7 +242,7 @@ def run(paths, output, config, language="es"):
     if config.xlsx:
         from src.languages import get_profile
 
-        write_excel(output / get_profile(language).export_filename, tables, config)
+        write_excel(output / get_profile(language).export_filename, tables, config, language)
     if config.csv:
         for (_, headers, rows), name in zip(tables[:2], ("lemmas.csv", "forms.csv")):
             with atomic_path(output / name) as tmp, tmp.open("w", encoding="utf-8", newline="") as stream:

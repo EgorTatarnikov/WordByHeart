@@ -11,3 +11,9 @@ data/output/
 logs/
 *.sqlite
 *.parquet
+
+# Local configuration and Office lock files
+.env
+.env.*
+!.env.example
+~$*
