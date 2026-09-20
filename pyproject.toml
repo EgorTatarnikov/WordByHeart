@@ -6,25 +6,29 @@ build-backend = "setuptools.build_meta"
 name = "word-by-heart"
 version = "0.1.0"
 description = "Restartable multilingual learning dictionary pipeline"
+readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.11"
-dependencies = ["spacy>=3.8,<3.9", "pandas>=2.2,<3", "pyarrow>=15", "openpyxl>=3.1", "python-docx>=1.1,<2", "phonemizer>=3.4,<4", "wordfreq>=3.1,<4", "openai>=1.68,<3", "python-dotenv>=1", "pydantic>=2.7,<3", "tqdm>=4.66", "PyYAML>=6", "filelock>=3.13"]
-
-[project.optional-dependencies]
-test = ["pytest>=8", "ruff>=0.9"]
-transformer = ["spacy-curated-transformers>=0.2.2,<1"]
+dependencies = ["customtkinter>=5.2.2,<6", "spacy>=3.8,<3.9", "pandas>=2.2,<3", "pyarrow>=15", "openpyxl>=3.1", "python-docx>=1.1,<2", "phonemizer>=3.4,<4", "wordfreq>=3.1,<4", "openai>=1.68,<3", "httpx>=0.27,<1", "charset-normalizer>=3.3,<4", "python-dotenv>=1", "pydantic>=2.7,<3", "tqdm>=4.66", "PyYAML>=6", "filelock>=3.13"]
 
 [project.scripts]
 word-by-heart = "src.main:main"
+word-by-heart-install-kaikki = "src.translation.download:main"
 
 [tool.setuptools.packages.find]
 include = ["src*"]
 
 [tool.setuptools.package-data]
 "src.grammar" = ["*.json"]
+"src" = [
+    "logo/*.png",
+    "logo/*.svg",
+    "fonts/Roboto_Condensed/OFL.txt",
+    "fonts/Roboto_Condensed/static/RobotoCondensed-Regular.ttf",
+    "fonts/Roboto_Condensed/static/RobotoCondensed-SemiBold.ttf",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["integration: requires an installed spaCy model"]
+markers = ["integration: requires installed NLP models or eSpeak NG"]
 
-[tool.ruff]
-line-length = 110

@@ -16,9 +16,10 @@ def project(tmp_path, monkeypatch, observations):
     config = {
         "nlp": {"model": "test"},
         "pronunciation": {"enabled": False},
-        "translation": {"enabled": False},
+        "machine_translation": {"enabled": False},
         "cards": {"enabled": False},
     }
+    # No local dictionary in tmp_path: Kaikki leaves translations blank without API calls.
     config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
     source = tmp_path / "book.txt"
     source.write_text("Juan vino a casa.\nEl vino era bueno.\n", encoding="utf-8")
@@ -52,7 +53,9 @@ def test_no_repeated_work(project):
     "section,key,value,stale",
     [
         ("pronunciation", "language", "es-419", {"ipa", "validate", "export", "cards"}),
-        ("translation", "prompt_version", "2.0", {"translate", "validate", "export", "cards"}),
+        ("machine_translation", "prompt_version", "2.0", {"translate", "validate", "export", "cards"}),
+        ("machine_translation", "enabled", True, {"translate", "validate", "export", "cards"}),
+        ("machine_translation", "model", "test-model", {"translate", "validate", "export", "cards"}),
         (
             "translation",
             "cumulative_coverage_limit",
@@ -74,7 +77,7 @@ def test_config_invalidation(project, section, key, value, stale):
     assert {s for s, (state, _) in statuses.items() if state == "OUTDATED"} == stale
     first = (
         "translate"
-        if section == "translation"
+        if section in {"translation", "machine_translation"}
         else "ipa"
         if section == "pronunciation"
         else "aggregate"

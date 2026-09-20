@@ -9,11 +9,10 @@ from tqdm import tqdm
 
 from src.cache import SQLiteCache
 from src.models import Translation
-from src.storage import canonical, read_rows, write_rows
+from src.storage import canonical
 
 from .cache import cache_key
 from .prompts import EN_SYSTEM_PROMPT, SYSTEM_PROMPT
-from .selection import TranslationSelection, select_lemmas_by_cumulative_coverage
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +56,7 @@ def parse_response(raw: str, expected: set[str], language="es") -> list[dict]:
 class OpenAITranslator:
     def __init__(self, config, client=None, language="es"):
         if not config.model.strip():
-            raise ValueError("Укажите translation.model в config.yaml")
+            raise ValueError("Укажите machine_translation.model в config.yaml")
         if client is None:
             from openai import OpenAI
 
@@ -103,28 +102,6 @@ class OpenAITranslator:
         return parse_response(response.output_text, {e["id"] for e in entries}, self.language)
 
 
-def prepare_entries(lemmas, forms, config):
-    entries = []
-    for kind, rows in (("lemma", lemmas), ("form", forms)):
-        for row in rows:
-            entry = {
-                "id": row["id"],
-                "kind": kind,
-                "lemma": row["lemma"],
-                "pos": row["pos"],
-                "morph_variants": row["morph_variants"],
-                "contexts": row["contexts"][: config.max_contexts],
-            }
-            if kind == "form":
-                entry["form"] = row["form"]
-            else:
-                entry["observed_forms"] = dict(
-                    sorted(row["observed_forms"].items(), key=lambda x: (-x[1], x[0]))[:10]
-                )
-            entries.append(entry)
-    return entries
-
-
 def translation_cache_counts(entries, config, cache_path, language="es") -> tuple[int, int]:
     """Return (cached, new) without mutating the cache or contacting a provider."""
     with SQLiteCache(cache_path) as cache:
@@ -155,7 +132,7 @@ def translate_entries(entries, config, cache_path, provider=None, language="es")
         logger.debug("Перевод: символов во входящих запросах %d.", len(canonical(missing)))
         if missing and provider is None:
             if config.provider != "openai":
-                raise ValueError(f"Неизвестный translation provider: {config.provider}")
+                raise ValueError(f"Неизвестный machine_translation provider: {config.provider}")
             provider = OpenAITranslator(config, language=language)
         api_requests = 0
         retries = Counter()
@@ -221,74 +198,3 @@ def translate_entries(entries, config, cache_path, provider=None, language="es")
             logger.warning("Перевод: повторено API-запросов %d (%s).", sum(retries.values()), details)
         logger.info("Переводы готовы: %d; API-запросов с повторами: %d.", len(missing), api_requests)
     return [Translation(**results[e["id"]]) for e in entries]
-
-
-def log_selection(
-    selection: TranslationSelection, lemmas: list[dict], forms: list[dict], config, cache_path, language="es"
-):
-    eligible_lemmas = [row for row in lemmas if row["id"] in selection.eligible_lemma_ids]
-    eligible_forms = [row for row in forms if row["id"] in selection.eligible_form_ids]
-    all_entries = prepare_entries(lemmas, forms, config)
-    entries_by_id = {entry["id"]: entry for entry in all_entries}
-    lemma_entries = [entries_by_id[row["id"]] for row in eligible_lemmas]
-    form_entries = [entries_by_id[row["id"]] for row in eligible_forms]
-    lemma_cached, lemma_new = translation_cache_counts(lemma_entries, config, cache_path, language)
-    form_cached, form_new = translation_cache_counts(form_entries, config, cache_path, language)
-    logger.info(
-        "Перевод: coverage %.2f%%, фактически %.2f%%.",
-        selection.requested_coverage,
-        selection.actual_coverage * 100,
-    )
-    logger.info("Выбрано: %d лемм и %d словоформ.", len(eligible_lemmas), len(eligible_forms))
-    logger.info(
-        "Кэш переводов: %d; новых переводов через API: %d.",
-        lemma_cached + form_cached,
-        lemma_new + form_new,
-    )
-    return all_entries, lemma_entries + form_entries
-
-
-def run(lemma_source, form_source, target, cache_path, config, provider=None, language="es"):
-    if config.translate_examples:
-        raise ValueError("translate_examples пока не реализован; установите false")
-    lemmas, forms = read_rows(lemma_source), read_rows(form_source)
-    selection = select_lemmas_by_cumulative_coverage(
-        lemmas,
-        forms,
-        config.cumulative_coverage_limit,
-        config.specificity_threshold,
-        config.min_book_occurrences,
-    )
-    all_entries = prepare_entries(lemmas, forms, config)
-    if not config.enabled:
-        write_rows(
-            target,
-            [
-                Translation(
-                    entry["id"],
-                    error="disabled",
-                    translation_eligible=entry["id"] in selection.eligible_lemma_ids
-                    or entry["id"] in selection.eligible_form_ids,
-                )
-                for entry in all_entries
-            ],
-        )
-        return
-    entries, eligible_entries = log_selection(selection, lemmas, forms, config, cache_path, language)
-    translated = {
-        item.id: item for item in translate_entries(eligible_entries, config, cache_path, provider, language)
-    }
-    result = []
-    for entry in entries:
-        eligible = entry["id"] in selection.eligible_lemma_ids or entry["id"] in selection.eligible_form_ids
-        result.append(
-            translated.get(
-                entry["id"],
-                Translation(
-                    entry["id"],
-                    error="outside cumulative coverage limit",
-                    translation_eligible=eligible,
-                ),
-            )
-        )
-    write_rows(target, result)

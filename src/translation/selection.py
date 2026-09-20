@@ -27,7 +27,8 @@ def select_lemmas_by_cumulative_coverage(
     selected = []
     target = cumulative_coverage_limit / 100
     for group in groups:
-        selected.append(group)
+        if group["count"] >= min_book_occurrences:
+            selected.append(group)
         if cumulative_coverage_limit < 100 and group["cumulative_coverage"] >= target - _EPSILON:
             break
     selected_names = {g["lemma"] for g in selected}

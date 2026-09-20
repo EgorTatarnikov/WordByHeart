@@ -4,8 +4,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from src.application import run_pipeline
 from src.manifest import DEPENDENCIES
 from src.pipeline import Pipeline
+from src.runtime import configure_logging, prepare_environment
 
 logger = logging.getLogger(__name__)
 
@@ -35,15 +37,17 @@ def main(argv=None):
     logging.getLogger("httpx").setLevel(logging.DEBUG if args.verbose else logging.WARNING)
     # Load the project/cwd .env first (where eSpeak DLL/data are normally kept),
     # then let a config-local file supply overrides for a specific run.
+    configure_logging(level=logging.DEBUG if args.verbose else logging.INFO)
     load_dotenv()
     load_dotenv(args.config.resolve().parent / ".env")
     try:
-        pipeline = Pipeline(args.config, getattr(args, "source", None))
+        prepare_environment()
         if args.command == "status":
+            pipeline = Pipeline(args.config, getattr(args, "source", None))
             for stage, (state, reason) in pipeline.status().items():
                 print(f"{stage:12} {state:9} {reason}")
         else:
-            pipeline.run(args.command, args.force)
+            run_pipeline(args.config, getattr(args, "source", None), args.command, args.force)
     except Exception as exc:
         if args.verbose:
             logger.exception("Ошибка pipeline")

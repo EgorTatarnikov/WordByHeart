@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 class PhonemizerService:
     def __init__(self, language):
+        from .discovery import configure_espeak
+        configure_espeak()
         from phonemizer.backend import EspeakBackend
 
         if language not in EspeakBackend.supported_languages():

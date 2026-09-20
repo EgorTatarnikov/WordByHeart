@@ -46,8 +46,8 @@ class Pronunciation(Settings):
     batch_size: int = Field(128, ge=1)
 
 
-class TranslationSettings(Settings):
-    enabled: bool = True
+class MachineTranslationSettings(Settings):
+    enabled: bool = False
     provider: str = "openai"
     model: str = ""
     batch_size: int = Field(30, ge=1, le=100)
@@ -56,8 +56,11 @@ class TranslationSettings(Settings):
     translate_examples: bool = False
     max_attempts: int = Field(3, ge=1, le=10)
     timeout: float = Field(90, gt=0)
+
+
+class TranslationSettings(Settings):
     cumulative_coverage_limit: float = 90.0
-    specificity_threshold: float = Field(2.0, ge=0)
+    specificity_threshold: float = Field(20.0, ge=0)
     min_book_occurrences: int = Field(3, ge=1)
 
     @field_validator("cumulative_coverage_limit")
@@ -110,6 +113,7 @@ class Config(Settings):
     grammar: Grammar = Field(default_factory=Grammar)
     pronunciation: Pronunciation = Field(default_factory=Pronunciation)
     translation: TranslationSettings = Field(default_factory=TranslationSettings)
+    machine_translation: MachineTranslationSettings = Field(default_factory=MachineTranslationSettings)
     validation: Validation = Field(default_factory=Validation)
     export: Export = Field(default_factory=Export)
     cards: Cards = Field(default_factory=Cards)

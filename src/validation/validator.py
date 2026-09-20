@@ -62,22 +62,26 @@ class Validator:
                     add(row["id"], "ipa", value.get("error") or "Отсутствует IPA")
                 elif re.search(r"[0-9]|\([a-z-]+\)", value["ipa"]):
                     add(row["id"], "ipa", "Подозрительная IPA")
-        if config.translation.enabled:
-            for row in translations:
-                if not row.get("translation_eligible", True):
-                    continue
-                for lang in ("ru", "en") if config.language == "es" else ("ru",):
-                    value = row.get(lang, "")
-                    if not value.strip():
-                        add(row["id"], "translation", f"Пустой {lang}", "error")
-                    elif len(value) > config.validation.max_translation_length or any(
-                        s in value for s in ("```", "**", "# ", "[", "\n")
-                    ):
-                        add(row["id"], "translation", f"{lang}: Markdown или длинное объяснение")
-                    elif (lang == "ru" and not re.search(r"[а-яА-ЯёЁ]", value)) or (
-                        lang == "en" and re.search(r"[а-яА-ЯёЁ]", value)
-                    ):
-                        add(row["id"], "translation", f"{lang}: проверить язык перевода")
+        for row in translations:
+            if not row.get("translation_eligible", True):
+                continue
+            for lang in ("ru", "en") if config.language == "es" else ("ru",):
+                value = row.get(lang, "")
+                if not value.strip():
+                    add(
+                        row["id"],
+                        "translation",
+                        f"Пустой {lang}",
+                        "error" if config.machine_translation.enabled else "info",
+                    )
+                elif len(value) > config.validation.max_translation_length or any(
+                    s in value for s in ("```", "**", "# ", "[", "\n")
+                ):
+                    add(row["id"], "translation", f"{lang}: Markdown или длинное объяснение")
+                elif (lang == "ru" and not re.search(r"[а-яА-ЯёЁ]", value)) or (
+                    lang == "en" and re.search(r"[а-яА-ЯёЁ]", value)
+                ):
+                    add(row["id"], "translation", f"{lang}: проверить язык перевода")
         return issues
 
 

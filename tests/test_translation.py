@@ -5,12 +5,14 @@ import httpx
 import pytest
 from openai import APIConnectionError, RateLimitError
 
-from src.config import TranslationSettings
+from src.config import MachineTranslationSettings, TranslationSettings
 from src.export.excel_exporter import make_tables
 from src.pronunciation.cache import cache_key as ipa_key
 from src.storage import read_rows, write_rows
 from src.translation.cache import cache_key
-from src.translation.openai_translator import OpenAITranslator, parse_response, run, translate_entries
+from src.translation.download import build_index
+from src.translation.openai_translator import OpenAITranslator, parse_response, translate_entries
+from src.translation.service import run
 from src.translation.selection import select_lemmas_by_cumulative_coverage
 
 
@@ -27,7 +29,7 @@ def entry(id="one"):
 
 
 def test_cache_keys_include_context_pos_morph_model_prompt():
-    config = TranslationSettings(model="test-model")
+    config = MachineTranslationSettings(model="test-model")
     row = entry()
     original = cache_key(row, config)
     for key, value in [
@@ -42,9 +44,7 @@ def test_cache_keys_include_context_pos_morph_model_prompt():
         assert cache_key(row, config.model_copy(update={key: value})) != original
     assert ipa_key("casa", "es", "1") != ipa_key("casa", "es-419", "1")
     assert ipa_key("casa", "es", "1") != ipa_key("casa", "es", "2")
-    assert cache_key(row, config) == cache_key(
-        row, config.model_copy(update={"cumulative_coverage_limit": 90})
-    )
+    assert cache_key(row, config, language="es") != cache_key(row, config, language="en")
 
 
 def coverage_rows():
@@ -123,6 +123,17 @@ def test_selection_default_exact_boundary_and_crossing():
     assert crossing.actual_coverage == pytest.approx(0.902)
 
 
+def test_minimum_occurrences_excludes_rare_words_inside_coverage():
+    lemmas, forms = coverage_rows()
+    lemmas[1]["count"] = 3
+    selection = select_lemmas_by_cumulative_coverage(
+        lemmas, forms, 90, specificity_threshold=1e9, min_book_occurrences=4
+    )
+    assert selection.eligible_lemma_ids == {"lemma-a", "lemma-c", "lemma-d"}
+    assert selection.eligible_form_ids == {"form-a", "form-c", "form-d"}
+    assert selection.actual_coverage == pytest.approx(70 / 73)
+
+
 def test_selection_keeps_homonym_pos_separate():
     lemmas = [
         {"id": "noun", "lemma": "vino", "pos": "NOUN", "count": 70, "cumulative_coverage": 0.7},
@@ -148,6 +159,60 @@ def test_coverage_limit_config_invalid(value):
         TranslationSettings(cumulative_coverage_limit=value)
 
 
+@pytest.mark.parametrize("language", ["en", "es"])
+@pytest.mark.parametrize("installed", [True, False])
+def test_service_defaults_to_local_kaikki(tmp_path, monkeypatch, language, installed):
+    def unexpected_model_call(*args, **kwargs):
+        pytest.fail("Default translation must not call the model")
+
+    monkeypatch.setattr(
+        "src.translation.openai_translator.translate_entries", unexpected_model_call
+    )
+    lemmas, forms = coverage_rows()
+    lemma_path, form_path = tmp_path / "lemmas.parquet", tmp_path / "forms.parquet"
+    target, cache = tmp_path / "translations.parquet", tmp_path / "translations.sqlite"
+    write_rows(lemma_path, lemmas)
+    write_rows(form_path, forms)
+    dictionary = tmp_path / "kaikki" / "dictionary.sqlite"
+    if installed:
+        dictionary.parent.mkdir()
+        source = tmp_path / "dictionary.jsonl"
+        source.write_text(
+            json.dumps({
+                "lang_code": language,
+                "word": "a",
+                "pos": "noun",
+                "translations": [
+                    {"lang_code": "ru", "word": "перевод"},
+                    {"lang_code": "en", "word": "translation"},
+                ],
+            }),
+            encoding="utf-8",
+        )
+        build_index([source], dictionary)
+        before = dictionary.read_bytes()
+
+    run(
+        lemma_path, form_path, target, cache,
+        TranslationSettings(cumulative_coverage_limit=50), language=language,
+    )
+    rows = {row["id"]: row for row in read_rows(target)}
+    assert len(rows) == len(lemmas) + len(forms)
+    for key in ("lemma-a", "form-a"):
+        assert rows[key]["translation_eligible"] is True
+        assert rows[key]["ru"] == ("перевод" if installed else "")
+        assert rows[key]["en"] == ("translation" if installed and language == "es" else "")
+        assert rows[key]["error"] == ("" if installed else "kaikki dictionary missing")
+    for key in ("lemma-b", "form-b", "lemma-c", "form-c", "lemma-d", "form-d"):
+        assert rows[key]["translation_eligible"] is False
+        assert rows[key]["ru"] == rows[key]["en"] == ""
+    assert not cache.exists()
+    if installed:
+        assert dictionary.read_bytes() == before
+    else:
+        assert not dictionary.exists()
+
+
 def test_coverage_expansion_reuses_cache_and_artifact_keeps_all_entries(tmp_path):
     lemmas, forms = coverage_rows()
     lemma_path, form_path = tmp_path / "lemmas.parquet", tmp_path / "forms.parquet"
@@ -161,8 +226,9 @@ def test_coverage_expansion_reuses_cache_and_artifact_keeps_all_entries(tmp_path
             calls.append([row["id"] for row in rows])
             return [{"id": row["id"], "ru": "перевод", "en": "translation"} for row in rows]
 
-    config = TranslationSettings(model="test", batch_size=20, cumulative_coverage_limit=80)
-    run(lemma_path, form_path, target, cache, config, Provider())
+    config = TranslationSettings(cumulative_coverage_limit=80)
+    machine = MachineTranslationSettings(enabled=True, model="test", batch_size=20)
+    run(lemma_path, form_path, target, cache, config, Provider(), machine_config=machine)
     assert calls == [["lemma-a", "lemma-b", "form-a", "form-b"]]
     first = {row["id"]: row for row in read_rows(target)}
     assert len(first) == 8
@@ -170,11 +236,34 @@ def test_coverage_expansion_reuses_cache_and_artifact_keeps_all_entries(tmp_path
     assert first["lemma-c"]["ru"] == ""
     calls.clear()
     config.cumulative_coverage_limit = 90
-    run(lemma_path, form_path, target, cache, config, Provider())
+    run(lemma_path, form_path, target, cache, config, Provider(), machine_config=machine)
     assert calls == [["lemma-c", "form-c"]]
     second = {row["id"]: row for row in read_rows(target)}
     assert second["lemma-d"]["translation_eligible"] is False
     assert second["lemma-d"]["ru"] == ""
+
+
+def test_known_words_are_not_sent_for_translation(tmp_path):
+    lemmas, forms = coverage_rows()
+    lemma_path, form_path = tmp_path / "lemmas.parquet", tmp_path / "forms.parquet"
+    target, cache = tmp_path / "translations.parquet", tmp_path / "translations.sqlite"
+    write_rows(lemma_path, lemmas)
+    write_rows(form_path, forms)
+    calls = []
+
+    class Provider:
+        def translate(self, rows):
+            calls.append([row["id"] for row in rows])
+            return [{"id": row["id"], "ru": "перевод"} for row in rows]
+
+    run(
+        lemma_path, form_path, target, cache, TranslationSettings(cumulative_coverage_limit=100),
+        Provider(), language="en", machine_config=MachineTranslationSettings(enabled=True, model="test"), known_words={"b"},
+    )
+    assert calls == [["lemma-a", "lemma-c", "lemma-d", "form-a", "form-c", "form-d"]]
+    rows = {row["id"]: row for row in read_rows(target)}
+    assert rows["lemma-b"]["translation_eligible"] is False
+    assert rows["form-b"]["translation_eligible"] is False
 
 
 def test_coverage_reduction_does_not_delete_cache_or_send_api_requests(tmp_path):
@@ -198,8 +287,9 @@ def test_coverage_reduction_does_not_delete_cache_or_send_api_requests(tmp_path)
         form_path,
         target,
         cache,
-        TranslationSettings(model="test", cumulative_coverage_limit=100),
+        TranslationSettings(cumulative_coverage_limit=100),
         first_provider,
+        machine_config=MachineTranslationSettings(enabled=True, model="test"),
     )
     assert first_provider.calls == [
         ["lemma-a", "lemma-b", "lemma-c", "lemma-d", "form-a", "form-b", "form-c", "form-d"]
@@ -210,8 +300,9 @@ def test_coverage_reduction_does_not_delete_cache_or_send_api_requests(tmp_path)
         form_path,
         target,
         cache,
-        TranslationSettings(model="test", cumulative_coverage_limit=90),
+        TranslationSettings(cumulative_coverage_limit=90),
         reduced_provider,
+        machine_config=MachineTranslationSettings(enabled=True, model="test"),
     )
     assert reduced_provider.calls == []
     rows = {row["id"]: row for row in read_rows(target)}
@@ -235,8 +326,9 @@ def test_export_tables_keep_entries_outside_translation_coverage(tmp_path):
         form_path,
         target,
         cache,
-        TranslationSettings(model="test", cumulative_coverage_limit=90),
+        TranslationSettings(cumulative_coverage_limit=90),
         Provider(),
+        machine_config=MachineTranslationSettings(enabled=True, model="test"),
     )
     translations = read_rows(target)
     for rank, row in enumerate(lemmas, 1):
@@ -301,7 +393,7 @@ def test_partial_retry_and_cache_resume(tmp_path, monkeypatch):
             calls.append([r["id"] for r in rows])
             return [{"id": rows[0]["id"], "ru": "пришёл", "en": "came"}]
 
-    config = TranslationSettings(model="test", batch_size=2)
+    config = MachineTranslationSettings(model="test", batch_size=2)
     rows = [entry("one"), entry("two")]
     path = tmp_path / "cache.sqlite"
     result = translate_entries(rows, config, path, Provider())
@@ -330,7 +422,7 @@ def test_bounded_retries(tmp_path, monkeypatch, error_kind):
                 )
             return [{"id": "unexpected", "ru": "дом", "en": "house"}]
 
-    config = TranslationSettings(model="test", max_attempts=2)
+    config = MachineTranslationSettings(model="test", max_attempts=2)
     with pytest.raises(RuntimeError, match="не завершён"):
         translate_entries([entry()], config, tmp_path / "cache.sqlite", Provider())
     assert len(calls) == 2
@@ -338,7 +430,7 @@ def test_bounded_retries(tmp_path, monkeypatch, error_kind):
 
 def test_successful_batch_survives_later_failure(tmp_path, monkeypatch):
     monkeypatch.setattr("src.translation.openai_translator.time.sleep", lambda _: None)
-    config = TranslationSettings(model="test", batch_size=1, max_attempts=1)
+    config = MachineTranslationSettings(model="test", batch_size=1, max_attempts=1)
 
     class Partial:
         def translate(self, rows):
@@ -374,7 +466,7 @@ def test_failed_batch_is_retried_in_smaller_batches(tmp_path):
     rows = [entry(str(index)) for index in range(4)]
     result = translate_entries(
         rows,
-        TranslationSettings(model="test", batch_size=4, max_attempts=1),
+        MachineTranslationSettings(model="test", batch_size=4, max_attempts=1),
         tmp_path / "cache.sqlite",
         Provider(),
     )
@@ -394,7 +486,7 @@ def test_openai_structured_request_and_refusal():
             )
 
     client = SimpleNamespace(responses=Responses())
-    provider = OpenAITranslator(TranslationSettings(model="configured"), client)
+    provider = OpenAITranslator(MachineTranslationSettings(model="configured"), client)
     assert provider.translate([entry()])[0]["en"] == "came"
     assert calls[0]["model"] == "configured"
     assert calls[0]["text"]["format"]["strict"] is True

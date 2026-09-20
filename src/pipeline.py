@@ -124,12 +124,13 @@ class Pipeline:
                 "language": cfg["language"],
                 "targets": self.profile.translation_targets,
                 "translation": cfg["translation"],
+                "machine_translation": cfg["machine_translation"],
             },
             "postprocess": {"language": cfg["language"]},
             "validate": {
                 "validation": cfg["validation"],
                 "language": cfg["language"],
-                "enabled": {k: cfg[k]["enabled"] for k in ("grammar", "pronunciation", "translation")},
+                "enabled": {k: cfg[k]["enabled"] for k in ("grammar", "pronunciation", "machine_translation")},
             },
             "export": {"language": cfg["language"], "export": cfg["export"], "output": str(self.output)},
             "cards": {
@@ -142,15 +143,25 @@ class Pipeline:
                 "known_dictionary": cfg["known_dictionary"],
             },
         }
+        if not self.config.machine_translation.enabled:
+            dictionary = self.cache / "kaikki" / "dictionary.sqlite"
+            configs["translate"]["kaikki_dictionary"] = {
+                "path": str(dictionary),
+                "revision": (dictionary.stat().st_mtime_ns, dictionary.stat().st_size)
+                if dictionary.is_file()
+                else "missing",
+            }
         if self.config.grammar.lexicon:
             path = Path(self.config.grammar.lexicon)
             configs["grammar"]["lexicon_hash"] = file_hash(path) if path.is_file() else "missing"
         template = self.resolve(self.config.cards.template)
         configs["cards"]["template_hash"] = file_hash(template) if template.is_file() else "missing"
         if self.config.known_dictionary.enabled:
-            configs["cards"]["known_dictionary_hash"] = (
+            known_dictionary_hash = (
                 file_hash(self.known_dictionary_path) if self.known_dictionary_path.is_file() else "missing"
             )
+            configs["cards"]["known_dictionary_hash"] = known_dictionary_hash
+            configs["translate"]["known_dictionary_hash"] = known_dictionary_hash
         if self.config.pronunciation.enabled:
             try:
                 from phonemizer.backend import EspeakBackend
@@ -193,7 +204,7 @@ class Pipeline:
             result[stage] = self.manifest.status(stage, configs, fingerprints, self.outputs)
         return result
 
-    def run(self, stage, force=False):
+    def run(self, stage, force=False, on_progress=None):
         self.work.mkdir(parents=True, exist_ok=True)
         with FileLock(str(self.work / ".pipeline.lock"), timeout=0):
             self.manifest = Manifest(self.work / "manifest.json")
@@ -206,10 +217,14 @@ class Pipeline:
                         logger.info("Использованы сохранённые результаты: %s", ", ".join(cached))
                         cached = []
 
-                for name in DEPENDENCIES:
+                for index, name in enumerate(DEPENDENCIES):
+                    if on_progress:
+                        on_progress(name, index, len(DEPENDENCIES))
                     result = self._run(name, force, quiet_cached=True, before_run=log_cached)
                     if result == "cached":
                         cached.append(name)
+                    if on_progress:
+                        on_progress(name, index + 1, len(DEPENDENCIES))
                 log_cached()
             else:
                 self._run(stage, force)
@@ -292,7 +307,13 @@ class Pipeline:
 
             run(*self.outputs["postprocess"], out[0], self.cache / "phonemes.sqlite", cfg.pronunciation)
         elif stage == "translate":
-            from src.translation.openai_translator import run
+            from src.translation.service import run
+
+            known_words = None
+            if cfg.known_dictionary.enabled:
+                from src.cards.known_words import read_known_words
+
+                known_words = read_known_words(self.known_dictionary_path)
 
             run(
                 *self.outputs["postprocess"],
@@ -300,6 +321,8 @@ class Pipeline:
                 self.cache / "translations.sqlite",
                 cfg.translation,
                 language=cfg.language,
+                machine_config=cfg.machine_translation,
+                known_words=known_words,
             )
         elif stage == "validate":
             from src.validation.validator import run
