@@ -57,14 +57,14 @@ def command(args, timeout=1800, capture=False):
         text=True,
         encoding="utf-8",
         errors="replace",
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        # Installation output must stay live: large NLP model downloads can
+        # otherwise look frozen for a long time. Checks still capture output.
+        stdout=subprocess.PIPE if capture else None,
+        stderr=subprocess.STDOUT if capture else None,
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     )
     if result.stdout:
         logger.info("%s", result.stdout)
-        if not capture:
-            print(result.stdout, flush=True)
     return result
 
 
@@ -105,12 +105,27 @@ def install_dependencies():
 
     # Do not import pip internals before upgrading them in a subprocess.
     pip_version = tuple(map(int, re.match(r"(\d+)\.(\d+)", metadata.version("pip")).groups()))
+    truststore_args = ("--use-feature=truststore",) if (22, 2) <= pip_version < (24, 2) else ()
     # pip 25.2 enables resuming large model downloads after a network interruption.
     if pip_version < (25, 2):
-        require(
-            python("-m", "pip", "install", "--upgrade", "pip>=25.2", "--index-url", "https://pypi.org/simple"),
-            "Не удалось обновить pip.",
+        result = python(
+            "-m",
+            "pip",
+            "install",
+            "--upgrade",
+            "pip>=25.2",
+            *truststore_args,
+            "--index-url",
+            "https://pypi.org/simple",
         )
+        if result.returncode != 0:
+            print(
+                "Предупреждение: pip не удалось обновить. "
+                f"Установка продолжится с pip {metadata.version('pip')}.",
+                flush=True,
+            )
+        else:
+            truststore_args = ()
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     try:
         installed = next(
@@ -127,7 +142,16 @@ def install_dependencies():
         print("Библиотеки уже установлены.", flush=True)
         return
     require(
-        python("-m", "pip", "install", "-e", ".", "--index-url", "https://pypi.org/simple"),
+        python(
+            "-m",
+            "pip",
+            "install",
+            "-e",
+            ".",
+            *truststore_args,
+            "--index-url",
+            "https://pypi.org/simple",
+        ),
         "Не удалось установить зависимости. Проверьте подключение к PyPI и свободное место.",
     )
     if not imports_work():
@@ -140,6 +164,7 @@ def install_dependencies():
                 "--force-reinstall",
                 "-e",
                 ".",
+                *truststore_args,
                 "--index-url",
                 "https://pypi.org/simple",
             ),
@@ -174,7 +199,11 @@ def install_models(language="en"):
         if model_works(model):
             print(f"{model}: готово.", flush=True)
             continue
-        print(f"Установка/восстановление {model}...", flush=True)
+        print(
+            f"Установка/восстановление {model}...\n"
+            "Модель имеет большой размер. Ход загрузки будет показан ниже.",
+            flush=True,
+        )
         try:
             metadata.version(model)
             flags = ["--force-reinstall"]

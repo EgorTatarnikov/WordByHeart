@@ -87,6 +87,54 @@ def _register_fonts(window):
         return
 
 
+def _enable_entry_editing(entry):
+    """Add layout-independent clipboard shortcuts and a context menu."""
+    target = getattr(entry, "_entry", entry)
+
+    def virtual_event(name):
+        target.event_generate(name)
+
+    def select_all():
+        target.select_range(0, tk.END)
+        target.icursor(tk.END)
+
+    def keyboard_shortcut(event):
+        # Windows keycodes stay the same when the user switches keyboard layout.
+        action = {
+            65: select_all,
+            67: lambda: virtual_event("<<Copy>>"),
+            86: lambda: virtual_event("<<Paste>>"),
+            88: lambda: virtual_event("<<Cut>>"),
+        }.get(event.keycode)
+        if action is None:
+            return None
+        action()
+        return "break"
+
+    menu = tk.Menu(entry, tearoff=False)
+    menu.add_command(label="Вырезать", command=lambda: virtual_event("<<Cut>>"))
+    menu.add_command(label="Копировать", command=lambda: virtual_event("<<Copy>>"))
+    menu.add_command(label="Вставить", command=lambda: virtual_event("<<Paste>>"))
+    menu.add_separator()
+    menu.add_command(label="Выделить всё", command=select_all)
+
+    def show_menu(event):
+        target.focus_set()
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    def paste(_event=None):
+        virtual_event("<<Paste>>")
+        return "break"
+
+    target.bind("<Control-KeyPress>", keyboard_shortcut, add="+")
+    target.bind("<Shift-Insert>", paste, add="+")
+    target.bind("<Button-3>", show_menu, add="+")
+    entry._editing_menu = menu
+
+
 class Tooltip:
     """Универсальная подсказка с задержкой для элемента управления и его подписи."""
 
@@ -668,7 +716,7 @@ class MainWindow(ctk.CTk):
         win = ctk.CTkToplevel(self)
         self._api_key_window = win
         win.title("OpenAI API key")
-        win.geometry("520x244")
+        win.geometry("520x264")
         win.resizable(False, False)
         win.transient(self)
         win.grab_set()
@@ -687,6 +735,7 @@ class MainWindow(ctk.CTk):
                              border_color=THEME["most_dark"], border_width=THEME["border"],
                              corner_radius=THEME["radius"])
         entry.pack(fill="x", padx=20)
+        _enable_entry_editing(entry)
         key_path = self.root / ".local" / "api-key.bin"
         ctk.CTkLabel(
             body,
