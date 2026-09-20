@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import sysconfig
@@ -45,6 +46,11 @@ def official_download_environment():
     env["PIP_RESUME_RETRIES"] = "10"
     env["PIP_LOG"] = str(ROOT / "logs" / "pip.log")
     env["PYTHONUTF8"] = "1"
+    env["PYTHONUNBUFFERED"] = "1"
+    version = tuple(map(int, re.match(r"(\d+)\.(\d+)", metadata.version("pip")).groups()))
+    if version >= (25, 2):
+        # Rich's terminal bar only prints its final frame when stdout is a pipe.
+        env["PIP_PROGRESS_BAR"] = "raw"
     return env
 
 
@@ -70,7 +76,15 @@ def command(args, timeout=1800, capture=False):
                 output.append(line)
                 logger.info("%s", line.rstrip())
                 if not capture:
-                    print(line, end="", flush=True)
+                    progress = re.fullmatch(r"Progress (\d+) of (\d+)\s*", line)
+                    if progress:
+                        current, total = map(int, progress.groups())
+                        message = f"Загружено {current / 1_000_000:.1f} МБ"
+                        if total:
+                            message += f" из {total / 1_000_000:.1f} МБ ({current / total:.0%})"
+                        print(message, flush=True)
+                    else:
+                        print(line, end="", flush=True)
 
     reader = threading.Thread(target=read_output, daemon=True)
     reader.start()

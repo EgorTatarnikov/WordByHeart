@@ -62,3 +62,8 @@ class Controller:
     def stop(self):
         if self.process and self.process.poll() is None:
             self.process.terminate()
+            try:
+                self.process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait(timeout=3)

@@ -91,7 +91,12 @@ def _enable_entry_editing(entry):
     """Add layout-independent clipboard shortcuts and a context menu."""
     target = getattr(entry, "_entry", entry)
 
+    def focus_input(_event=None):
+        # Borderless Windows dialogs may not activate on a normal focus_set.
+        target.focus_force()
+
     def virtual_event(name):
+        focus_input()
         target.event_generate(name)
 
     def select_all():
@@ -119,7 +124,7 @@ def _enable_entry_editing(entry):
     menu.add_command(label="Выделить всё", command=select_all)
 
     def show_menu(event):
-        target.focus_set()
+        focus_input()
         try:
             menu.tk_popup(event.x_root, event.y_root)
         finally:
@@ -130,9 +135,29 @@ def _enable_entry_editing(entry):
         return "break"
 
     target.bind("<Control-KeyPress>", keyboard_shortcut, add="+")
+    target.bind("<Button-1>", focus_input, add="+")
+    # CTkEntry's background/border is a separate canvas, outside the Tk Entry.
+    canvas = getattr(entry, "_canvas", None)
+    if canvas is not None:
+        canvas.bind("<Button-1>", focus_input, add="+")
+        canvas.bind("<Button-3>", show_menu, add="+")
     target.bind("<Shift-Insert>", paste, add="+")
     target.bind("<Button-3>", show_menu, add="+")
     entry._editing_menu = menu
+
+
+def _focus_dialog_entry(window, entry):
+    """Focus the input after the borderless dialog has been mapped."""
+    def focus():
+        if window.winfo_exists() and entry.winfo_exists() and window.winfo_viewable():
+            entry.focus_force()
+
+    def mapped(event):
+        if event.widget == window:
+            window.after_idle(focus)
+
+    window.bind("<Map>", mapped, add="+")
+    window.after_idle(focus)
 
 
 class Tooltip:
@@ -142,6 +167,7 @@ class Tooltip:
         self.widgets = [widgets] if not isinstance(widgets, (tuple, list)) else list(widgets)
         self.text, self.delay = text, delay
         self.timer = None
+        self._timer_widget = None
         self.window = None
         for widget in self.widgets:
             widget.bind("<Enter>", self._schedule, add="+")
@@ -151,10 +177,12 @@ class Tooltip:
     def _schedule(self, event=None):
         self._cancel_timer()
         widget = event.widget if event else self.widgets[0]
+        self._timer_widget = widget
         self.timer = widget.after(self.delay, lambda: self._show(widget))
 
     def _show(self, widget):
         self.timer = None
+        self._timer_widget = None
         if self.window or not widget.winfo_exists():
             return
         self.window = tk.Toplevel(widget)
@@ -173,10 +201,11 @@ class Tooltip:
     def _cancel_timer(self):
         if self.timer:
             try:
-                self.widgets[0].after_cancel(self.timer)
+                self._timer_widget.after_cancel(self.timer)
             except tk.TclError:
                 pass
             self.timer = None
+            self._timer_widget = None
 
     def _hide(self, _event=None):
         self._cancel_timer()
@@ -221,6 +250,8 @@ class MainWindow(ctk.CTk):
         )
         self._set_window_icon()
         self.overrideredirect(True)
+        self.bind("<Map>", self._main_window_mapped, add="+")
+        self.after_idle(self._sync_taskbar)
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.configure(fg_color=THEME["medium"])
         # Верхняя панель: логотип, название и кнопки свернуть/закрыть.
@@ -412,6 +443,46 @@ class MainWindow(ctk.CTk):
         except (tk.TclError, OSError):
             logging.getLogger(__name__).warning("Application icon could not be loaded: %s", logo_path)
 
+    def _windows_set_titlebar_icon(self):
+        # CTk schedules this hook after startup; retain our PNG instead of its ICO.
+        self._set_window_icon()
+
+    def _main_window_mapped(self, event):
+        if event.widget is self and not self._closing:
+            self.after_idle(self._sync_taskbar)
+
+    def _sync_taskbar(self):
+        if os.name != "nt" or self._closing:
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            user32 = ctypes.WinDLL("user32", use_last_error=True)
+            user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+            user32.GetAncestor.restype = wintypes.HWND
+            user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+            user32.GetWindowLongW.restype = wintypes.LONG
+            user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.LONG]
+            user32.SetWindowLongW.restype = wintypes.LONG
+            user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+            user32.ShowWindow.restype = wintypes.BOOL
+            hwnd = user32.GetAncestor(self.winfo_id(), 2)  # GA_ROOT: Tk's native wrapper
+            style = user32.GetWindowLongW(hwnd, -20)  # GWL_EXSTYLE
+            app_style = (style | 0x00040000) & ~0x00000080  # APPWINDOW, not TOOLWINDOW
+            if style != app_style:
+                ctypes.set_last_error(0)
+                previous = user32.SetWindowLongW(hwnd, -20, app_style)
+                if not previous and ctypes.get_last_error():
+                    raise ctypes.WinError(ctypes.get_last_error())
+                if self.state() == "normal":
+                    # Shell refresh is required after changing taskbar styles.
+                    user32.ShowWindow(hwnd, 0)
+                    user32.ShowWindow(hwnd, 4)  # show without stealing focus
+            self._set_window_icon()
+        except (OSError, tk.TclError):
+            logging.getLogger(__name__).exception("Unable to update Windows taskbar")
+
     def _drag_start(self, event):
         self._drag_x, self._drag_y = event.x_root - self.winfo_x(), event.y_root - self.winfo_y()
 
@@ -422,12 +493,15 @@ class MainWindow(ctk.CTk):
         """Temporarily restore native decorations so Windows can minimize the window."""
         self.overrideredirect(False)
         self.iconify()
-        self.bind("<Map>", self._restore_borderless, add="+")
+        self._restore_map_id = self.bind("<Map>", self._restore_borderless, add="+")
 
     def _restore_borderless(self, _event=None):
+        if _event is not None and _event.widget is not self:
+            return
         if self.state() == "normal":
             self.overrideredirect(True)
-            self.unbind("<Map>")
+            self.unbind("<Map>", self._restore_map_id)
+            self.after_idle(self._sync_taskbar)
 
     def _button(self, parent, text, command, **kwargs):
         # Общий конструктор кнопок: единая рамка, цвет, шрифт и скругление.
@@ -681,6 +755,8 @@ class MainWindow(ctk.CTk):
         self.after(500, self._poll_spanish_installation)
 
     def _poll_spanish_installation(self):
+        if self._closing:
+            return
         result = self._language_install_process.poll()
         if result is None:
             self.after(500, self._poll_spanish_installation)
@@ -710,7 +786,7 @@ class MainWindow(ctk.CTk):
         if self._api_key_window and self._api_key_window.winfo_exists():
             self._api_key_window.deiconify()
             self._api_key_window.lift()
-            self._api_key_window.focus_force()
+            self._api_key_window._api_key_entry.focus_force()
             return
 
         win = ctk.CTkToplevel(self)
@@ -735,6 +811,7 @@ class MainWindow(ctk.CTk):
                              border_color=THEME["most_dark"], border_width=THEME["border"],
                              corner_radius=THEME["radius"])
         entry.pack(fill="x", padx=20)
+        win._api_key_entry = entry
         _enable_entry_editing(entry)
         key_path = self.root / ".local" / "api-key.bin"
         ctk.CTkLabel(
@@ -764,8 +841,8 @@ class MainWindow(ctk.CTk):
         self._button(buttons, "Сохранить", save).pack(side="right")
         win.protocol("WM_DELETE_WINDOW", cancel)
         entry.bind("<Return>", lambda _event: save())
-        entry.focus_set()
         self._center_dialog(win)
+        _focus_dialog_entry(win, entry)
 
     def browse(self):
         # Открывает системный диалог выбора входного TXT-файла.
@@ -904,16 +981,27 @@ class MainWindow(ctk.CTk):
         if self.controller.running:
             if not messagebox.askyesno("Остановить анализ?", "Обработка ещё идёт. Остановить её и закрыть окно?", parent=self):
                 return
-            self.controller.stop()
         self._closing = True
-        if self._poll_id is not None:
+        try:
+            self.controller.stop()
+        except Exception:
+            logging.getLogger(__name__).exception("Unable to stop analysis on exit")
+        try:
+            # Cancel pending focus, tooltip, polling and CTk callbacks before teardown.
+            for callback in self.tk.splitlist(self.tk.call("after", "info")):
+                try:
+                    # Keep each callback registered with its owning widget until
+                    # destroy; cancelling via self would corrupt child bookkeeping.
+                    self.tk.call("after", "cancel", callback)
+                except tk.TclError:
+                    pass
+            self._poll_id = None
+            self.destroy()
+        except Exception:
+            logging.getLogger(__name__).exception("GUI cleanup failed; closing native window")
             try:
-                self.after_cancel(self._poll_id)
+                self.tk.call("destroy", ".")
             except tk.TclError:
                 pass
-            self._poll_id = None
-        if self._help_window and self._help_window.winfo_exists():
-            self._help_window.destroy()
-        if self._api_key_window and self._api_key_window.winfo_exists():
-            self._api_key_window.destroy()
-        self.destroy()
+        finally:
+            self.quit()
