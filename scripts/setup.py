@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import sysconfig
+import threading
 import tomllib
 import urllib.request
 from importlib import metadata
@@ -48,28 +49,62 @@ def official_download_environment():
 
 
 def command(args, timeout=1800, capture=False):
-    result = subprocess.run(
+    process = subprocess.Popen(
         args,
         cwd=ROOT,
         env=official_download_environment(),
-        timeout=timeout,
-        check=False,
         text=True,
         encoding="utf-8",
         errors="replace",
         # Installation output must stay live: large NLP model downloads can
         # otherwise look frozen for a long time. Checks still capture output.
-        stdout=subprocess.PIPE if capture else None,
-        stderr=subprocess.STDOUT if capture else None,
-        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" and capture else 0,
     )
-    if result.stdout:
-        logger.info("%s", result.stdout)
-    return result
+    output = []
+
+    def read_output():
+        with process.stdout:
+            for line in process.stdout:
+                output.append(line)
+                logger.info("%s", line.rstrip())
+                if not capture:
+                    print(line, end="", flush=True)
+
+    reader = threading.Thread(target=read_output, daemon=True)
+    reader.start()
+    try:
+        process.wait(timeout=timeout)
+    except BaseException:
+        # spaCy launches pip as a child; do not leave downloads running after timeout.
+        if os.name == "nt":
+            try:
+                subprocess.run(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    creationflags=subprocess.CREATE_NO_WINDOW, timeout=10,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                logger.warning("Не удалось завершить дерево процесса %s", process.pid)
+        if process.poll() is None:
+            process.kill()
+        process.wait()
+        raise
+    finally:
+        reader.join(timeout=10)
+    return subprocess.CompletedProcess(args, process.returncode, "".join(output))
+
+
+def pip_truststore_args():
+    import re
+
+    version = tuple(map(int, re.match(r"(\d+)\.(\d+)", metadata.version("pip")).groups()))
+    return ("--use-feature=truststore",) if (22, 2) <= version < (24, 2) else ()
 
 
 def python(*args, **kwargs):
-    return command([sys.executable, *args], **kwargs)
+    return command([sys.executable, "-u", *args], **kwargs)
 
 
 def require(result, message):
@@ -108,17 +143,22 @@ def install_dependencies():
     truststore_args = ("--use-feature=truststore",) if (22, 2) <= pip_version < (24, 2) else ()
     # pip 25.2 enables resuming large model downloads after a network interruption.
     if pip_version < (25, 2):
-        result = python(
-            "-m",
-            "pip",
-            "install",
-            "--upgrade",
-            "pip>=25.2",
-            *truststore_args,
-            "--index-url",
-            "https://pypi.org/simple",
-        )
-        if result.returncode != 0:
+        try:
+            result = python(
+                "-m",
+                "pip",
+                "install",
+                "--upgrade",
+                "pip>=25.2",
+                *truststore_args,
+                "--index-url",
+                "https://pypi.org/simple",
+                timeout=180,
+            )
+        except subprocess.TimeoutExpired:
+            logger.warning("Превышено время обновления pip; используется установленная версия.")
+            result = None
+        if result is None or result.returncode != 0:
             print(
                 "Предупреждение: pip не удалось обновить. "
                 f"Установка продолжится с pip {metadata.version('pip')}.",
@@ -210,7 +250,7 @@ def install_models(language="en"):
         except metadata.PackageNotFoundError:
             flags = []
         require(
-            python("-m", "spacy", "download", model, *flags, timeout=3600),
+            python("-m", "spacy", "download", model, *flags, *pip_truststore_args(), timeout=3600),
             f"Не удалось установить {model}. Проверьте доступ к github.com/explosion/spacy-models.",
         )
         if not model_works(model):

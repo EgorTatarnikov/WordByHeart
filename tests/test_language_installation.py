@@ -1,4 +1,5 @@
 import json
+import sqlite3
 
 import yaml
 
@@ -26,4 +27,10 @@ def test_spanish_requires_model_and_spanish_dictionary_data(tmp_path, monkeypatc
     assert not language_is_installed(tmp_path, "es")
 
     (cache / "SOURCES.json").write_text(json.dumps({"editions": ["ru", "es"]}), encoding="utf-8")
+    assert not language_is_installed(tmp_path, "es")
+    with sqlite3.connect(cache / "dictionary.sqlite") as db:
+        db.execute('CREATE TABLE metadata (key TEXT, value TEXT)')
+        db.execute("INSERT INTO metadata VALUES ('schema_version', '1')")
+        db.execute('CREATE TABLE translations (language, word, pos, target, value, priority)')
+        db.execute("INSERT INTO translations VALUES ('es', 'casa', 'noun', 'ru', 'дом', 0)")
     assert language_is_installed(tmp_path, "es")

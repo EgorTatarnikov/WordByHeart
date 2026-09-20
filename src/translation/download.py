@@ -18,6 +18,7 @@ from tqdm import tqdm
 from src.config import load_config
 
 from .kaikki import SCHEMA_VERSION, translation_rows
+from .health import dictionary_is_healthy
 
 SOURCES = {
     "ru": "https://kaikki.org/dictionary/downloads/ru/ru-extract.jsonl.gz",
@@ -123,7 +124,7 @@ def install(cache_dir, force=False, languages=("en",)):
                 installed_editions = set(json.loads(metadata_path.read_text(encoding="utf-8")).get("editions", []))
             except (OSError, ValueError):
                 pass
-        if target.is_file() and required_editions <= installed_editions and not force:
+        if required_editions <= installed_editions and not force and dictionary_is_healthy(target, full=True):
             logger.info("Kaikki уже установлен для %s", ", ".join(sorted(languages)))
             return target
         editions = installed_editions | required_editions
