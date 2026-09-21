@@ -98,13 +98,16 @@ def _write_paragraph(paragraph, text: str, size: int, space_after: int = 3):
     run.font.size = Pt(size)
 
 
-def render(cards, template: Path, target: Path, config, language="es") -> int:
+def render(cards, template: Path, target: Path, config, language="es", machine_translation=False) -> int:
     if not template.is_file():
         raise ValueError(f"Cards template not found: {template}")
     if config.cards_per_page != config.rows * config.columns:
         raise ValueError("cards_per_page must equal rows * columns")
     sheets = math.ceil(len(cards) / config.cards_per_page) if cards else 0
     document = Document(template)
+    from src.export.excel_exporter import KAIKKI_TRANSLATION_CREDIT
+
+    document.core_properties.comments = "" if machine_translation else KAIKKI_TRANSLATION_CREDIT
     if sheets == 0:
         raise ValueError("Cannot generate cards: no selected entries.")
     tables = _clone_template_tables(document, sheets)
@@ -161,7 +164,16 @@ def render(cards, template: Path, target: Path, config, language="es") -> int:
     return sheets
 
 
-def run(paths, template, target, cards_config, translation_config, language="es", known_dictionary=None):
+def run(
+    paths,
+    template,
+    target,
+    cards_config,
+    translation_config,
+    language="es",
+    known_dictionary=None,
+    machine_translation=False,
+):
     data = {name: read_rows(path) for name, path in paths.items()}
     known_words = set()
     if known_dictionary:
@@ -176,11 +188,11 @@ def run(paths, template, target, cards_config, translation_config, language="es"
         language,
         known_words,
     )
-    sheets = render(cards, template, target, cards_config, language)
+    sheets = render(cards, template, target, cards_config, language, machine_translation)
     from src.cards.learning_list import list_filename, render_learning_list
 
     list_target = target.parent / list_filename(language)
-    render_learning_list(cards, list_target, cards_config, language)
+    render_learning_list(cards, list_target, cards_config, language, machine_translation)
     logger.info("Список для изучения: %s", list_target)
     long_forms = sum(
         len(

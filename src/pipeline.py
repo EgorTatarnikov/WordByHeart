@@ -83,6 +83,7 @@ class Pipeline:
         self.source = Path(source).resolve() if source else Path(saved) if saved else None
         self.outputs = {stage: [self.work / name for name in names] for stage, names in ARTIFACTS.items()}
         self.outputs["export"] = []
+        self.outputs["export"].append(self.output / "ATTRIBUTION.txt")
         if self.config.export.xlsx:
             self.outputs["export"].append(self.output / self.profile.export_filename)
         if self.config.export.csv:
@@ -336,6 +337,8 @@ class Pipeline:
                 self.output,
                 cfg.export,
                 cfg.language,
+                self.source.name,
+                cfg.machine_translation.enabled,
             )
         elif stage == "cards":
             if not cfg.cards.enabled:
@@ -350,4 +353,5 @@ class Pipeline:
                 cfg.translation,
                 cfg.language,
                 str(self.known_dictionary_path) if cfg.known_dictionary.enabled else None,
+                cfg.machine_translation.enabled,
             )

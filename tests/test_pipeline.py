@@ -148,8 +148,8 @@ def test_excel_csv_and_manifest(project):
     path, _ = project
     pipeline = Pipeline(path)
     book = load_workbook(pipeline.output / "spanish_frequency_dictionary.xlsx")
-    assert book.sheetnames == ["Леммы", "Словоформы", "Проверка"]
-    for sheet in book:
+    assert book.sheetnames == ["Леммы", "Словоформы", "Проверка", "Атрибуция"]
+    for sheet in (book["Леммы"], book["Словоформы"], book["Проверка"]):
         assert sheet.freeze_panes == "A2"
         assert sheet.auto_filter.ref
         assert sheet["A1"].font.bold
@@ -161,7 +161,11 @@ def test_excel_csv_and_manifest(project):
     assert sheet["G2"].value > 0
     columns = {cell.value: cell.column for cell in sheet[1]}
     assert sheet.cell(2, columns["Перевод на русский"]).value is None
+    attribution = "\n".join(cell.value or "" for cell in book["Атрибуция"]["A"])
+    assert "Переводы: Kaikki.org / участники Wiktionary." in attribution
+    assert "Исходный текст: book.txt." in attribution
     book.close()
+    assert (pipeline.output / "ATTRIBUTION.txt").read_text(encoding="utf-8") == attribution + "\n"
     assert (pipeline.output / "lemmas.csv").read_text(encoding="utf-8").startswith("Ранг,Лемма")
     manifest = json.loads((pipeline.work / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["source"]["sha256"]

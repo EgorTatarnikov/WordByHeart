@@ -14,6 +14,9 @@ from src.storage import atomic_path, read_rows
 
 logger = logging.getLogger(__name__)
 
+KAIKKI_TRANSLATION_CREDIT = "Переводы: Kaikki.org / Wiktionary contributors, CC BY-SA 4.0. "
+WORDFREQ_CREDIT = "Частотность: wordfreq, Copyright 2022 Robyn Speer."
+
 LEMMA_COLUMNS = [
     "Ранг",
     "Лемма",
@@ -161,8 +164,10 @@ def english_columns(headers, rows):
     return [headers[i] for i in keep], [[row[i] for i in keep] for row in rows]
 
 
-def write_excel(target, tables, config, language=None):
+def write_excel(target, tables, config, language=None, attribution=None, description=None):
     book = Workbook()
+    if description is not None:
+        book.properties.description = description
     book.remove(book.active)
     for name, headers, rows in tables:
         if len(rows) > 1048575:
@@ -231,18 +236,71 @@ def write_excel(target, tables, config, language=None):
             sheet.row_dimensions[row[0].row].height = min(
                 409, max(32 if row[0].row == 1 else 30, line_count * 15)
             )
+    if attribution:
+        sheet = book.create_sheet("Атрибуция")
+        sheet.column_dimensions["A"].width = 110
+        for row, line in enumerate(attribution.splitlines(), 1):
+            cell = sheet.cell(row=row, column=1, value=line)
+            cell.font = Font(name="Calibri", size=config.font_size)
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
     with atomic_path(target) as tmp:
         book.save(tmp)
     book.close()
 
 
-def run(paths, output, config, language="es"):
+def make_attribution(source_name, machine_translation=False):
+    translation = (
+        "Переводы: LLM"
+        if machine_translation
+        else """Переводы: Kaikki.org / участники Wiktionary.
+Данные автоматически отобраны и обработаны программой WordByHeart.
+Лицензия: CC BY-SA 4.0.
+https://kaikki.org/
+https://en.wiktionary.org/wiki/Wiktionary:Copyrights
+https://creativecommons.org/licenses/by-sa/4.0/"""
+    )
+    return f"""Создано с помощью WordByHeart.
+WordByHeart — Copyright © 2026 Egor Tatarnikov, GPL-3.0-only.
+https://github.com/EgorTatarnikov/WordByHeart
+
+{translation}
+
+Общеязыковая частотность: wordfreq.
+Copyright © 2022 Robyn Speer.
+https://github.com/rspeer/wordfreq
+https://github.com/rspeer/wordfreq/blob/master/NOTICE.md
+
+Транскрипция IPA: eSpeak NG.
+https://github.com/espeak-ng/espeak-ng
+
+NLP-анализ: spaCy.
+https://spacy.io/
+
+Исходный текст: {source_name}.
+Права на исходный текст принадлежат его автору или правообладателю.
+""".lstrip()
+
+
+def run(paths, output, config, language="es", source_name="", machine_translation=False):
     tables = make_tables({key: read_rows(path) for key, path in paths.items()})
     output.mkdir(parents=True, exist_ok=True)
+    attribution = make_attribution(source_name, machine_translation)
+    description = WORDFREQ_CREDIT
+    if not machine_translation:
+        description = KAIKKI_TRANSLATION_CREDIT + description
+    with atomic_path(output / "ATTRIBUTION.txt") as tmp:
+        tmp.write_text(attribution, encoding="utf-8")
     if config.xlsx:
         from src.languages import get_profile
 
-        write_excel(output / get_profile(language).export_filename, tables, config, language)
+        write_excel(
+            output / get_profile(language).export_filename,
+            tables,
+            config,
+            language,
+            attribution,
+            description,
+        )
     if config.csv:
         for (_, headers, rows), name in zip(tables[:2], ("lemmas.csv", "forms.csv")):
             with atomic_path(output / name) as tmp, tmp.open("w", encoding="utf-8", newline="") as stream:
