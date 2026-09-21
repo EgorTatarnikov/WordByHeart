@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tkinter as tk
 import time
+import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox
 
@@ -251,6 +252,7 @@ class MainWindow(ctk.CTk):
         self._set_window_icon()
         self.overrideredirect(True)
         self.bind("<Map>", self._main_window_mapped, add="+")
+        self.bind("<FocusIn>", self._main_window_focused, add="+")
         self.after_idle(self._sync_taskbar)
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.configure(fg_color=THEME["medium"])
@@ -450,6 +452,19 @@ class MainWindow(ctk.CTk):
     def _main_window_mapped(self, event):
         if event.widget is self and not self._closing:
             self.after_idle(self._sync_taskbar)
+            self.after(50, self._raise_open_dialogs)
+
+    def _main_window_focused(self, _event):
+        if not self._closing:
+            self.after_idle(self._raise_open_dialogs)
+
+    def _raise_open_dialogs(self):
+        """Keep the help and API-key dialogs above the main window."""
+        if self._closing:
+            return
+        for window in (self._help_window, self._api_key_window):
+            if window and window.winfo_exists() and window.state() == "normal":
+                window.lift(self)
 
     def _sync_taskbar(self):
         if os.name != "nt" or self._closing:
@@ -522,7 +537,7 @@ class MainWindow(ctk.CTk):
         self.controls.append(widget)
         return widget
 
-    def _dialog_body(self, window, title, close_command):
+    def _dialog_body(self, window, title, close_command, show_minimize=True):
         """Give a secondary window the same border and title bar as the main window."""
         window.configure(fg_color=THEME["medium"])
         window.tk.call(
@@ -554,7 +569,8 @@ class MainWindow(ctk.CTk):
             window.iconify()
             window.bind("<Map>", restore_borderless, add="+")
 
-        for col, (symbol, command) in enumerate((("–", minimize), ("×", close_command)), 2):
+        titlebar_buttons = (("–", minimize), ("×", close_command)) if show_minimize else (("×", close_command),)
+        for col, (symbol, command) in enumerate(titlebar_buttons, 2):
             button = tk.Label(bar, text=symbol, bg=THEME["most_dark"], fg=THEME["white"],
                               font=("Segoe UI", 14), width=4, cursor="hand2", anchor="n")
             button.grid(row=0, column=col, sticky="nsew")
@@ -595,7 +611,7 @@ class MainWindow(ctk.CTk):
         win.geometry("760x520")
         win.transient(self)
         win.protocol("WM_DELETE_WINDOW", win.destroy)
-        body = self._dialog_body(win, "Справка — Word by Heart", win.destroy)
+        body = self._dialog_body(win, "Справка — Word by Heart", win.destroy, show_minimize=False)
         ctk.CTkLabel(body, text="Справка", font=_font(THEME["font_semibold"], 21), text_color=THEME["white"]).pack(padx=20, pady=(18, 8))
         text = """        Word by Heart – это приложение для подготовки лексики к изучению, необходимой для прочтения конкретной книги или просмотра сериала на иностранном языке.
         Приложение создает из текста готовый набор слов для изучения и повторения.
@@ -676,9 +692,33 @@ class MainWindow(ctk.CTk):
 """
         textbox = ctk.CTkTextbox(body, wrap="word", font=_font(), fg_color=THEME["dark"], text_color=THEME["white"],
                                  border_color=THEME["most_dark"], border_width=THEME["border"], corner_radius=THEME["radius"])
-        textbox.pack(fill="both", expand=True, padx=18, pady=(4, 18))
+        textbox.pack(fill="both", expand=True, padx=18, pady=(4, 8))
         textbox.insert("1.0", text)
         textbox.configure(state="disabled")
+
+        ctk.CTkLabel(
+            body,
+            text="Copyright (C) by Egor Tatarnikov",
+            font=_font(),
+            text_color=THEME["white"],
+        ).pack(padx=18, pady=(0, 8))
+
+        links = ctk.CTkFrame(body, fg_color="transparent")
+        links.pack(fill="x", padx=18, pady=(0, 18))
+        video_button = self._button(
+            links,
+            "Видеоинструкция",
+            lambda: webbrowser.open_new_tab("https://youtu.be/EgXKmGsFIZ4?si=62vkeXVz6Xby4kKN"),
+        )
+        video_button.pack(side="left")
+        github_button = self._button(
+            links,
+            "GitHub",
+            lambda: webbrowser.open_new_tab("https://github.com/EgorTatarnikov/WordByHeart"),
+        )
+        github_button.pack(side="right")
+        Tooltip(video_button, "Посмотреть видеоинструкцию на YouTube по работе с приложением")
+        Tooltip(github_button, "Ссылка на репозиторий проекта и лицензию")
         self._center_dialog(win)
 
     def defaults(self, *_):
@@ -792,7 +832,7 @@ class MainWindow(ctk.CTk):
         win = ctk.CTkToplevel(self)
         self._api_key_window = win
         win.title("OpenAI API key")
-        win.geometry("520x264")
+        win.geometry("620x264")
         win.resizable(False, False)
         win.transient(self)
         win.grab_set()
@@ -801,7 +841,7 @@ class MainWindow(ctk.CTk):
             self.machine.set(False)
             win.destroy()
 
-        body = self._dialog_body(win, "OpenAI API key", cancel)
+        body = self._dialog_body(win, "OpenAI API key", cancel, show_minimize=False)
 
         entered_key = ctk.StringVar()
         ctk.CTkLabel(body, text="Введите OpenAI API key", font=_font(THEME["font_semibold"], 21),
