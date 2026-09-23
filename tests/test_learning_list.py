@@ -1,4 +1,6 @@
 from pathlib import Path
+from xml.etree import ElementTree
+from zipfile import ZipFile
 
 import pytest
 from docx import Document
@@ -43,6 +45,11 @@ def test_learning_list_matches_printed_card(tmp_path, language):
     assert (row[3] or "") == (back[-1] if len(back) > 1 + translations else "")
     assert sheet.freeze_panes == "A2"
     book.close()
+    # openpyxl accepts metadata that Windows/Excel rejects; inspect the package too.
+    for artifact in (xlsx, docx):
+        with ZipFile(artifact) as archive:
+            core = ElementTree.fromstring(archive.read("docProps/core.xml"))
+        assert all("{http://www.w3.org/XML/1998/namespace}space" not in node.attrib for node in core.iter())
 
 
 def test_learning_list_text_cannot_become_excel_formula(tmp_path):

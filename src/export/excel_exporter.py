@@ -167,7 +167,8 @@ def english_columns(headers, rows):
 def write_excel(target, tables, config, language=None, attribution=None, description=None):
     book = Workbook()
     if description is not None:
-        book.properties.description = description
+        # Whitespace makes openpyxl add xml:space, which OPC core properties reject.
+        book.properties.description = description.strip()
     book.remove(book.active)
     for name, headers, rows in tables:
         if len(rows) > 1048575:

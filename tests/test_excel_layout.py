@@ -1,9 +1,24 @@
 import pytest
+from xml.etree import ElementTree
+from zipfile import ZipFile
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
 from src.config import Export
 from src.export.excel_exporter import EN_WIDTHS_PX, LEMMA_COLUMNS, english_columns, write_excel
+
+
+@pytest.mark.parametrize("description", [" credit ", "\tcredit\n", "credit", "   "])
+def test_description_is_valid_opc_metadata(tmp_path, description):
+    target = tmp_path / "metadata.xlsx"
+    write_excel(target, [("Test", ["Text"], [[" content "]])], Export(), description=description)
+    with ZipFile(target) as archive:
+        core = ElementTree.fromstring(archive.read("docProps/core.xml"))
+    assert all("{http://www.w3.org/XML/1998/namespace}space" not in node.attrib for node in core.iter())
+    book = load_workbook(target)
+    assert (book.properties.description or "") == description.strip()
+    assert book.active["A2"].value == " content "
+    book.close()
 
 
 def test_empty_optional_columns_only_and_no_input_mutation():
