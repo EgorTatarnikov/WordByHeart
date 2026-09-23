@@ -23,7 +23,6 @@ LEMMA_COLUMNS = [
     "Учебная форма",
     "Суммарное число вхождений",
     "Всего вхождений леммы",
-    "Доля от всех слов",
     "Кумулятивное покрытие",
     "Относительная частота в книге",
     "Частота Wordfreq",
@@ -76,7 +75,6 @@ def make_tables(data):
                 g["learning_form"],
                 r["count"],
                 group["count"],
-                group["share"],
                 group["cumulative_coverage"],
                 group["share"],
                 group["reference_frequency"],
@@ -136,13 +134,12 @@ def clean(value):
 
 EN_OPTIONAL_COLUMNS = {"Род", "Группа спряжения", "Регулярность", "Перевод на английский"}
 EN_WIDTHS_PX = {
-    "Ранг": 38,
+    "Ранг": 40,
     **dict.fromkeys(["Лемма", "Учебная форма", "Транскрипция", "Часть речи"], 180),
     **dict.fromkeys(
         [
             "Суммарное число вхождений",
             "Всего вхождений леммы",
-            "Доля от всех слов",
             "Кумулятивное покрытие",
             "Относительная частота в книге",
             "Частота Wordfreq",
@@ -195,8 +192,8 @@ def write_excel(target, tables, config, language=None, attribution=None, descrip
                 else 26
             )
             if language == "en" and name in {"Леммы", "Словоформы"} and header in EN_WIDTHS_PX:
-                # Calibri 11: approximately seven pixels per character plus five pixels padding.
-                width = (EN_WIDTHS_PX[header] - 5) / 7
+                # OOXML width already includes padding (Calibri 11, 7px digit at 96 DPI).
+                width = math.floor(EN_WIDTHS_PX[header] / 7 * 256) / 256
             widths.append(width)
             sheet.column_dimensions[get_column_letter(col)].width = width
         for values in rows:
@@ -222,15 +219,13 @@ def write_excel(target, tables, config, language=None, attribution=None, descrip
                 if cell.row == 1:
                     cell.fill = PatternFill("solid", fgColor="E8EDF2")
                 elif headers[cell.column - 1] in {
-                    "Доля от всех слов",
                     "Кумулятивное покрытие",
                     "Относительная частота в книге",
                 }:
                     cell.number_format = "0.00%"
-                elif headers[cell.column - 1] in {
-                    "Частота Wordfreq",
-                    "Специфичность",
-                }:
+                elif headers[cell.column - 1] == "Частота Wordfreq":
+                    cell.number_format = "0.000000%"
+                elif headers[cell.column - 1] == "Специфичность":
                     cell.number_format = "0.000000"
                 elif isinstance(cell.value, int):
                     cell.number_format = "#,##0"

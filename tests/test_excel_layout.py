@@ -54,7 +54,9 @@ def test_workbook_layout_language_scope_and_widths(tmp_path, language):
     if language == "en":
         for header, pixels in EN_WIDTHS_PX.items():
             column = get_column_letter(exported.index(header) + 1)
-            assert sheet.column_dimensions[column].width * 7 + 5 == pytest.approx(pixels)
+            stored_width = sheet.column_dimensions[column].width
+            # ISO 29500 conversion from the saved OOXML width to pixels.
+            assert int(((256 * stored_width + int(128 / 7)) / 256) * 7) == pixels
     assert sheet.auto_filter.ref == sheet.dimensions
     assert sheet.freeze_panes == "A2"
     book.close()

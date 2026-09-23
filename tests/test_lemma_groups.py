@@ -5,6 +5,9 @@ from src.cards.selector import select_cards
 from src.export.excel_exporter import make_tables
 from src.lemma_groups import group_lemmas
 from src.translation.selection import select_lemmas_by_cumulative_coverage
+from src.config import Export
+from src.export.excel_exporter import write_excel
+from openpyxl import load_workbook
 
 
 def sample():
@@ -85,6 +88,33 @@ def test_group_frequency_selection_and_unique_reference():
     assert len(selection.eligible_form_ids) == 4
 
 
+@pytest.mark.parametrize("language", ["en", "es"])
+def test_export_preserves_frequency_and_specificity(tmp_path, language):
+    target = tmp_path / f"{language}_dictionary.xlsx"
+    write_excel(target, make_tables(sample()), Export(), language)
+    book = load_workbook(target)
+    sheet = book["Леммы"]
+    headers = [cell.value for cell in sheet[1]]
+    assert "Доля от всех слов" not in headers
+    assert headers.count("Относительная частота в книге") == 1
+    for row, count, reference in ((2, 11, 0.02), (3, 11, 0.02), (4, 10, 0.01)):
+        frequency = sheet.cell(row, headers.index("Относительная частота в книге") + 1)
+        specificity = sheet.cell(row, headers.index("Специфичность") + 1)
+        assert frequency.value == pytest.approx(count / 21)
+        assert frequency.number_format == "0.00%"
+        wordfreq = sheet.cell(row, headers.index("Частота Wordfreq") + 1)
+        assert wordfreq.value == pytest.approx(reference)
+        assert wordfreq.number_format == "0.000000%"
+        assert specificity.value == pytest.approx((count / 21) / reference)
+        assert specificity.number_format == "0.000000"
+    forms = book["Словоформы"]
+    wordfreq_column = [cell.value for cell in forms[1]].index("Частота Wordfreq") + 1
+    for row in range(2, forms.max_row + 1):
+        assert forms.cell(row, wordfreq_column).value == pytest.approx(0.01)
+        assert forms.cell(row, wordfreq_column).number_format == "0.000000%"
+    book.close()
+
+
 def test_specificity_adds_entire_group_and_counts_actual_coverage():
     data = sample()
     # book leads the frequency prefix; watch qualifies only by combined count.
@@ -105,18 +135,19 @@ def test_single_compact_card_and_adjacent_export_rows():
     assert [r[1] for r in rows] == ["watch", "watch", "book"]
     assert [r[headers.index("Всего вхождений леммы")] for r in rows] == [11, 11, 10]
     assert [r[headers.index("Ранг")] for r in rows] == [1, 1, 2]
-    assert headers[3:10] == [
+    assert headers[3:9] == [
         "Суммарное число вхождений",
         "Всего вхождений леммы",
-        "Доля от всех слов",
         "Кумулятивное покрытие",
         "Относительная частота в книге",
         "Частота Wordfreq",
         "Специфичность",
     ]
-    assert len(headers) == 22
+    assert len(headers) == 21
+    assert "Доля от всех слов" not in headers
+    assert all(len(row) == len(headers) for row in rows)
     for row in rows[:2]:
-        assert row[4:10] == pytest.approx([11, 11 / 21, 11 / 21, 11 / 21, 0.02, (11 / 21) / 0.02])
+        assert row[4:9] == pytest.approx([11, 11 / 21, 11 / 21, 0.02, (11 / 21) / 0.02])
     assert rows[-1][headers.index("Кумулятивное покрытие")] == 1
     cards, _ = select_cards(data, 100, language="en", known_words={"watch"})
     assert [c.lemma for c in cards] == ["book"]
