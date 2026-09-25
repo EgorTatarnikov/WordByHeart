@@ -34,13 +34,21 @@ def test_empty_optional_columns_only_and_no_input_mutation():
 @pytest.mark.parametrize("language", ["en", "es"])
 def test_workbook_layout_language_scope_and_widths(tmp_path, language):
     headers = LEMMA_COLUMNS
-    values = {"Лемма": "watch", "Количество контекстных блоков": 3, "Перевод на русский": "часы"}
+    values = {
+        "Лемма": "watch",
+        "Учебная форма": "watch",
+        "Инфинитив": "watch",
+        "Количество контекстных блоков": 3,
+        "Перевод на русский": "часы",
+    }
     rows = [[values.get(header, "") for header in headers]]
     target = tmp_path / "dictionary.xlsx"
     write_excel(target, [("Леммы", headers, rows)], Export(), language)
     book = load_workbook(target)
     sheet = book.active
     exported = [cell.value for cell in sheet[1]]
+    assert ("Учебная форма" in exported) == (language == "es")
+    assert ("Инфинитив" in exported) == (language == "es")
     index = exported.index("Количество контекстных блоков")
     assert exported[index - 1 : index + 2] == [
         "Специфичность",

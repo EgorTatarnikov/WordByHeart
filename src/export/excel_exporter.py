@@ -133,9 +133,10 @@ def clean(value):
 
 
 EN_OPTIONAL_COLUMNS = {"Род", "Группа спряжения", "Регулярность", "Перевод на английский"}
+EN_EXCLUDED_COLUMNS = {"Учебная форма", "Инфинитив"}
 EN_WIDTHS_PX = {
     "Ранг": 40,
-    **dict.fromkeys(["Лемма", "Учебная форма", "Транскрипция", "Часть речи"], 180),
+    **dict.fromkeys(["Лемма", "Транскрипция", "Часть речи"], 180),
     **dict.fromkeys(
         [
             "Суммарное число вхождений",
@@ -152,11 +153,12 @@ EN_WIDTHS_PX = {
 
 
 def english_columns(headers, rows):
-    """Drop only optional empty display columns; preserve data and shared schemas."""
+    """Drop duplicate verb forms and optional empty display columns."""
     keep = [
         i
         for i, header in enumerate(headers)
-        if header not in EN_OPTIONAL_COLUMNS or any(str(clean(row[i])).strip() for row in rows)
+        if header not in EN_EXCLUDED_COLUMNS
+        and (header not in EN_OPTIONAL_COLUMNS or any(str(clean(row[i])).strip() for row in rows))
     ]
     return [headers[i] for i in keep], [[row[i] for i in keep] for row in rows]
 

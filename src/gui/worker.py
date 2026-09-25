@@ -72,7 +72,7 @@ def main(argv=None):
             from src.storage import read_rows
 
             lemmas = read_rows(pipeline.outputs["postprocess"][0])
-            summary = f"Обработка завершена. Лемм: {len(lemmas)}."
+            summary = f"Обработка завершена. Лемм: {len({row['lemma'] for row in lemmas})}."
             count = pipeline.manifest.data["stages"].get("cards", {}).get("selected_cards")
             if count is not None:
                 summary += f" Карточек: {count}."
