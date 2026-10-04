@@ -148,15 +148,66 @@ def test_selection_keeps_homonym_pos_separate():
     assert selection.eligible_form_ids == {"noun-form"}
 
 
-@pytest.mark.parametrize("value", [100, 90, 90.5])
+@pytest.mark.parametrize("value", [0, 100, 90])
 def test_coverage_limit_config_valid(value):
     assert TranslationSettings(cumulative_coverage_limit=value).cumulative_coverage_limit == value
 
 
-@pytest.mark.parametrize("value", [0, -10, 100.01])
+@pytest.mark.parametrize("value", [-10, 101])
 def test_coverage_limit_config_invalid(value):
-    with pytest.raises(ValueError, match="cumulative_coverage_limit must be > 0 and <= 100"):
+    with pytest.raises(ValueError, match="cumulative_coverage_limit must be >= 0 and <= 100"):
         TranslationSettings(cumulative_coverage_limit=value)
+
+
+@pytest.mark.parametrize("coverage,threshold,minimum,expected", [
+    (0, 0, 1, set()),
+    (100, 0, 1, {"lemma-a", "lemma-b", "lemma-c", "lemma-d"}),
+    (0, 0, 1000000, set()),
+    (100, 1000, 1000000, set()),
+])
+def test_selection_boundaries(coverage, threshold, minimum, expected):
+    lemmas, forms = coverage_rows()
+    result = select_lemmas_by_cumulative_coverage(lemmas, forms, coverage, threshold, minimum)
+    assert result.eligible_lemma_ids == expected
+
+
+@pytest.mark.parametrize("field,value", [
+    ("specificity_threshold", -1), ("specificity_threshold", 1001),
+    ("specificity_threshold", 1.5), ("min_book_occurrences", 0),
+    ("cumulative_coverage_limit", 90.5),
+    ("min_book_occurrences", 1000001),
+])
+def test_selection_settings_reject_invalid_ranges(field, value):
+    with pytest.raises(ValueError):
+        TranslationSettings(**{field: value})
+
+
+def test_exact_upper_threshold_and_occurrence_boundaries():
+    config = TranslationSettings(cumulative_coverage_limit=0, specificity_threshold=1000,
+                                 min_book_occurrences=1000000)
+    lemmas = [{"id": "word", "lemma": "word", "pos": "NOUN", "count": 1000000}]
+    forms = [{"id": "form", "lemma": "word", "pos": "NOUN", "form": "word",
+              "reference_frequency": 0.001}]
+    selection = select_lemmas_by_cumulative_coverage(
+        lemmas, forms, config.cumulative_coverage_limit, config.specificity_threshold,
+        config.min_book_occurrences)
+    assert selection.eligible_lemma_ids == {"word"}
+    assert selection.eligible_form_ids == {"form"}
+
+
+def test_empty_machine_translation_does_not_call_provider(tmp_path):
+    lemmas, forms = coverage_rows()
+    lemma_path, form_path, target = [tmp_path / name for name in ("lemmas.parquet", "forms.parquet", "translations.parquet")]
+    write_rows(lemma_path, lemmas)
+    write_rows(form_path, forms)
+
+    def unexpected_provider(*args, **kwargs):
+        pytest.fail("Empty selection must not call translation provider")
+
+    run(lemma_path, form_path, target, tmp_path / "cache.sqlite",
+        TranslationSettings(cumulative_coverage_limit=0, specificity_threshold=0, min_book_occurrences=1),
+        provider=unexpected_provider, machine_config=MachineTranslationSettings(enabled=True))
+    assert all(not row["translation_eligible"] for row in read_rows(target))
 
 
 @pytest.mark.parametrize("language", ["en", "es"])

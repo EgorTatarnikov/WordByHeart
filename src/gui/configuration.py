@@ -1,6 +1,7 @@
 """Build a per-book runtime config without changing the demo YAML files."""
 
 import hashlib
+import re
 from pathlib import Path
 
 import yaml
@@ -8,6 +9,35 @@ import yaml
 from src.config import Config, load_config
 
 LANGUAGES = {"English": "en", "Español": "es"}
+
+
+def restore_empty_default(entry, variable, default):
+    """Keep an empty edit until focus leaves or the user clicks elsewhere."""
+    def restore(*_):
+        if variable.get() == "":
+            variable.set(str(default))
+
+    def clicked(event):
+        target = str(event.widget)
+        if target != str(entry) and not target.startswith(str(entry) + "."):
+            restore()
+
+    entry.bind("<FocusOut>", restore, add="+")
+    entry.winfo_toplevel().bind("<Button-1>", clicked, add="+")
+    return restore
+
+
+def valid_numeric_edit(value, maximum, decimal=False, minimum=0):
+    """Allow temporary empty edits, but reject nonnumeric and excessive input."""
+    if value == "":
+        return True
+    pattern = r"[0-9]+(?:[.,][0-9]*)?" if decimal else r"[0-9]+"
+    if not re.fullmatch(pattern, value):
+        return False
+    try:
+        return minimum <= float(value.replace(",", ".")) <= maximum
+    except ValueError:
+        return False
 
 
 def build_config(root, source, language, options):
@@ -24,7 +54,7 @@ def build_config(root, source, language, options):
     cfg.machine_translation.enabled = bool(options["machine"])
     cfg.known_dictionary.enabled = bool(options["known"])
     cfg.pronunciation.enabled = bool(options["ipa"])
-    cfg.translation.cumulative_coverage_limit = float(options["coverage"])
+    cfg.translation.cumulative_coverage_limit = int(options["coverage"])
     cfg.translation.specificity_threshold = float(options["specificity"])
     cfg.translation.min_book_occurrences = int(options["occurrences"])
     # Revalidate assignments before any files are written.

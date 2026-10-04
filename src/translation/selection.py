@@ -27,6 +27,8 @@ def select_lemmas_by_cumulative_coverage(
     selected = []
     target = cumulative_coverage_limit / 100
     for group in groups:
+        if cumulative_coverage_limit == 0:
+            break
         if group["count"] >= min_book_occurrences:
             selected.append(group)
         if cumulative_coverage_limit < 100 and group["cumulative_coverage"] >= target - _EPSILON:
@@ -35,7 +37,7 @@ def select_lemmas_by_cumulative_coverage(
     selected_names.update(
         g["lemma"]
         for g in groups
-        if g["specificity"] >= specificity_threshold and g["count"] >= min_book_occurrences
+        if specificity_threshold > 0 and g["specificity"] >= specificity_threshold and g["count"] >= min_book_occurrences
     )
     lemma_ids = frozenset(row["id"] for row in lemmas if row["lemma"] in selected_names)
     eligible_keys = {(row["lemma"], row["pos"]) for row in lemmas if row["id"] in lemma_ids}

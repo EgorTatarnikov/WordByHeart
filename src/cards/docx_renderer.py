@@ -7,6 +7,7 @@ from docx import Document
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Pt
 
 from src.cards.formatter import (
@@ -109,7 +110,13 @@ def render(cards, template: Path, target: Path, config, language="es", machine_t
 
     document.core_properties.comments = "" if machine_translation else KAIKKI_TRANSLATION_CREDIT
     if sheets == 0:
-        raise ValueError("Cannot generate cards: no selected entries.")
+        for element in list(document.element.body):
+            if element.tag != qn("w:sectPr"):
+                document.element.body.remove(element)
+        document.add_paragraph("Нет слов для изучения при выбранных настройках.")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        document.save(target)
+        return 0
     tables = _clone_template_tables(document, sheets)
     if any(len(table.rows) != config.rows or len(table.columns) != config.columns for table in tables):
         raise ValueError(f"Cards template tables must be {config.rows} × {config.columns}.")

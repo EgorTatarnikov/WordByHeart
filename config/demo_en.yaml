@@ -17,7 +17,7 @@ translation:
 machine_translation:
   enabled: false
   provider: openai
-  model: gpt-5.6-luna
+  model: gpt-6-luna
 cards:
   enabled: true
   template: ../table.docx

@@ -59,15 +59,15 @@ class MachineTranslationSettings(Settings):
 
 
 class TranslationSettings(Settings):
-    cumulative_coverage_limit: float = 90.0
-    specificity_threshold: float = Field(20.0, ge=0)
-    min_book_occurrences: int = Field(3, ge=1)
+    cumulative_coverage_limit: int = 90
+    specificity_threshold: int = Field(20, ge=0, le=1000)
+    min_book_occurrences: int = Field(3, ge=1, le=1000000)
 
     @field_validator("cumulative_coverage_limit")
     @classmethod
     def validate_cumulative_coverage_limit(cls, value: float) -> float:
-        if not 0 < value <= 100:
-            raise ValueError("translation.cumulative_coverage_limit must be > 0 and <= 100")
+        if not 0 <= value <= 100:
+            raise ValueError("translation.cumulative_coverage_limit must be >= 0 and <= 100")
         return value
 
 

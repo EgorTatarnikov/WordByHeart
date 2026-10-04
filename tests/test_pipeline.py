@@ -144,6 +144,61 @@ def test_empty_book_pipeline(project, monkeypatch):
     book.close()
 
 
+@pytest.mark.parametrize("coverage,threshold,minimum", [
+    (0, 0, 1000000), (0, 0, 1), (0, 1, 1000000),
+    (0, 1000, 1000000), (100, 0, 1000000), (100, 1, 1000000),
+    (100, 1000, 1000000),
+])
+def test_empty_selection_completes_all_stages(project, monkeypatch, coverage, threshold, minimum):
+    from docx import Document
+
+    path, source = project
+    cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
+    cfg["translation"] = {"cumulative_coverage_limit": coverage,
+                          "specificity_threshold": threshold, "min_book_occurrences": minimum}
+    cfg["cards"] = {"enabled": True, "template": str(Path(__file__).resolve().parents[1] / "table.docx")}
+    path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr("src.translation.kaikki.translate_entries",
+                        lambda entries, *args: calls.append(entries) or [])
+    pipeline = Pipeline(path, source)
+    pipeline.run("run-all")
+    assert calls == [[]]
+    assert all(state == "OK" for state, _ in pipeline.status().values())
+    book = load_workbook(pipeline.output / "spanish_list.xlsx")
+    assert book["Список для изучения"].max_row == 1
+    book.close()
+    document = Document(pipeline.outputs["cards"][0])
+    assert not document.tables
+
+
+@pytest.mark.parametrize("coverage", [0, 100])
+@pytest.mark.parametrize("threshold", [0, 1, 1000])
+@pytest.mark.parametrize("minimum", [1, 1000000])
+def test_boundary_combinations_complete(project, coverage, threshold, minimum):
+    from src.translation.selection import select_lemmas_by_cumulative_coverage
+
+    path, source = project
+    cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
+    cfg["translation"] = {"cumulative_coverage_limit": coverage,
+                          "specificity_threshold": threshold, "min_book_occurrences": minimum}
+    cfg["cards"] = {"enabled": True, "template": str(Path(__file__).resolve().parents[1] / "table.docx")}
+    path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    pipeline = Pipeline(path, source)
+    pipeline.run("run-all")
+    assert all(state == "OK" for state, _ in pipeline.status().values())
+    data = pipeline.data_paths()
+    selection = select_lemmas_by_cumulative_coverage(
+        read_rows(data["lemmas"]), read_rows(data["forms"]), coverage, threshold, minimum)
+    translations = read_rows(data["translations"])
+    assert {row["id"] for row in translations if row["translation_eligible"]} == (
+        selection.eligible_lemma_ids | selection.eligible_form_ids)
+    book = load_workbook(pipeline.output / "spanish_list.xlsx")
+    names = {row["lemma"] for row in read_rows(data["lemmas"]) if row["id"] in selection.eligible_lemma_ids}
+    assert book["Список для изучения"].max_row == len(names) + 1
+    book.close()
+
+
 def test_excel_csv_and_manifest(project):
     path, _ = project
     pipeline = Pipeline(path)
