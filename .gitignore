@@ -7,6 +7,9 @@
 !/data/input/demo_en.txt
 !/data/input/demo_es.txt
 /logs/
+/outputs/word_list/
+/outputs/word_list_v2/
+/outputs/word_list_v3/
 __pycache__/
 *.py[cod]
 *.egg-info/

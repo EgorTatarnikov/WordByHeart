@@ -18,7 +18,7 @@ The sun is warm.
 The tree is green.
 The children play outside.
 I have a blue pen.
-The door is open.
+The door isn't open.
 The book is on the table.
 The child reads a small book.
 I have a beautiful book.

@@ -7,6 +7,7 @@ from charset_normalizer import from_bytes
 from src.storage import atomic_path
 
 from .normalizer import normalize
+from .english_contractions import expand_contractions
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +37,11 @@ def read_text_auto(source: Path) -> tuple[str, str]:
         return str(match), match.encoding or "unknown"
 
 
-def run(source: Path, target: Path, config):
+def run(source: Path, target: Path, config, language: str = "es"):
     decoded, encoding = read_text_auto(source)
     text = normalize(decoded, config)
+    if language == "en":
+        text = expand_contractions(text)
     with atomic_path(target) as tmp:
         tmp.write_text(text, encoding="utf-8")
     logger.info("Исходный файл: %s; кодировка: %s; символов: %d", source, encoding, len(text))

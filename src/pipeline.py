@@ -24,7 +24,7 @@ ARTIFACTS = {
     "cards": [],
 }
 CODE_PATHS = {
-    "preprocess": ["preprocessing/loader.py", "preprocessing/normalizer.py"],
+    "preprocess": ["preprocessing/loader.py", "preprocessing/normalizer.py", "preprocessing/english_contractions.py"],
     "nlp": ["nlp/processor.py", "preprocessing/chunker.py"],
     "aggregate": ["aggregation", "nlp/token_filter.py"],
     "reference": ["reference_frequency"],
@@ -106,6 +106,7 @@ class Pipeline:
         cfg = self.config.model_dump()
         configs = {
             "preprocess": {
+                "language": cfg["language"],
                 "preprocess": cfg["preprocess"],
                 "source": {
                     "file": str(self.source),
@@ -282,7 +283,7 @@ class Pipeline:
         if stage == "preprocess":
             from src.preprocessing.loader import run
 
-            run(self.source, out[0], cfg.preprocess)
+            run(self.source, out[0], cfg.preprocess, cfg.language)
         elif stage == "nlp":
             from src.nlp.processor import run
 
