@@ -31,12 +31,36 @@ def test_unique_texts_cache_and_disabled(tmp_path, monkeypatch):
     assert read_rows(target)[0]["error"].startswith("unsupported")
     run(lemmas, forms, target, cache, config)
     assert calls == [["casa"]]
-    config.language = "es-419"
+    config.language = "es"
     run(lemmas, forms, target, cache, config)
     assert calls == [["casa"], ["casa"]]
     config.enabled = False
     run(lemmas, forms, target, cache, config)
     assert all(r["error"] == "disabled" for r in read_rows(target))
+
+
+def test_feminine_lemma_also_phonemizes_masculine_learning_word(tmp_path, monkeypatch):
+    calls = []
+
+    class Service:
+        version = "test"
+
+        def __init__(self, language):
+            assert language == "es-419"
+
+        def phonemize(self, texts):
+            calls.extend(texts)
+            return ["nˈiɲo" for _ in texts]
+
+    monkeypatch.setattr("src.pronunciation.service.PhonemizerService", Service)
+    lemmas, forms, target, cache = [
+        tmp_path / name for name in ("lemmas.parquet", "forms.parquet", "ipa.parquet", "cache.sqlite")
+    ]
+    write_rows(lemmas, [{"lemma": "niña", "pos": "NOUN"}])
+    write_rows(forms, [])
+    run(lemmas, forms, target, cache, Pronunciation())
+    assert calls == ["niña", "niño"]
+    assert {row["text"] for row in read_rows(target)} == {"niña", "niño"}
 
 
 @pytest.mark.integration

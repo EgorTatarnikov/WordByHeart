@@ -7,6 +7,7 @@ from src.models import GrammarInfo
 from src.storage import read_rows, write_rows
 
 from .adjectives import enrich_adjective
+from .gender_pairs import gender_pair_for_word, masculine_word
 from .nouns import enrich_noun
 from .pos_mapping import POS_RU, format_morph
 from .verbs import enrich_verb
@@ -40,7 +41,20 @@ def enrich(lemmas, forms, config, language="es"):
         if config.enabled:
             info.provenance = "spaCy observed morphology + conservative rules + lexicon"
             if row["pos"] == "NOUN":
-                enrich_noun(row, info, lexicon, by_lemma[row["lemma"], row["pos"]])
+                pair = gender_pair_for_word(row["lemma"])
+                if pair:
+                    info.learning_form = pair["masculine"]
+                    info.grammar_forms = " / ".join(
+                        pair[key] for key in
+                        ("masculine", "feminine", "masculine_plural", "feminine_plural")
+                    )
+                    info.provenance += "; curated Spanish gender pair"
+                    if row["lemma"].casefold() != masculine_word(pair).casefold():
+                        info.grammatical_gender = "женский"
+                    elif pair["type"] == "different_form":
+                        info.grammatical_gender = "мужской"
+                else:
+                    enrich_noun(row, info, lexicon, by_lemma[row["lemma"], row["pos"]])
             elif row["pos"] == "ADJ":
                 enrich_adjective(row, info, lexicon)
             elif row["pos"] in {"VERB", "AUX"}:

@@ -20,7 +20,7 @@ _PROFILES = {
         "es",
         "es",
         "es_dep_news_trf",
-        "es",
+        "es-419",
         ("ru", "en"),
         "spanish_frequency_dictionary.xlsx",
         True,

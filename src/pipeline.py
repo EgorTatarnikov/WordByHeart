@@ -29,7 +29,7 @@ CODE_PATHS = {
     "aggregate": ["aggregation", "nlp/token_filter.py"],
     "reference": ["reference_frequency"],
     "grammar": ["grammar"],
-    "ipa": ["pronunciation", "cache.py"],
+    "ipa": ["pronunciation", "grammar/spanish_gender_pairs.tsv", "grammar/gender_pairs.py", "cache.py"],
     "translate": ["translation", "cache.py"],
     "postprocess": ["postprocessing"],
     "validate": ["validation", "grammar/pos_mapping.py"],
@@ -180,7 +180,7 @@ class Pipeline:
             for path in paths:
                 full = root / path
                 files.extend(
-                    sorted(p for p in full.rglob("*") if p.suffix in {".py", ".json"})
+                sorted(p for p in full.rglob("*") if p.suffix in {".py", ".json", ".tsv"})
                 ) if full.is_dir() else files.append(full)
             versions = {p: package_version(p) for p in PACKAGES[stage] + ["pyarrow"]}
             configs[stage]["tool_versions"] = versions

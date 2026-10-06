@@ -19,7 +19,7 @@ word-by-heart-install-kaikki = "src.translation.download:main"
 include = ["src*"]
 
 [tool.setuptools.package-data]
-"src.grammar" = ["*.json"]
+"src.grammar" = ["*.json", "*.tsv"]
 "src" = [
     "logo/*.png",
     "logo/*.svg",

@@ -42,7 +42,7 @@ class Grammar(Settings):
 
 class Pronunciation(Settings):
     enabled: bool = True
-    language: str = "es"
+    language: str = "es-419"
     batch_size: int = Field(128, ge=1)
 
 

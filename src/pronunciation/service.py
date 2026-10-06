@@ -29,9 +29,17 @@ class PhonemizerService:
 
 
 def run(lemma_source, form_source, target, cache_path, config):
-    texts = sorted(
-        {r["lemma"] for r in read_rows(lemma_source)} | {r["form"] for r in read_rows(form_source)}
-    )
+    lemmas = read_rows(lemma_source)
+    texts = {r["lemma"] for r in lemmas} | {r["form"] for r in read_rows(form_source)}
+    if config.language.startswith("es"):
+        from src.grammar.gender_pairs import gender_pair_for_word, masculine_word
+
+        texts.update(
+            masculine_word(pair)
+            for row in lemmas if row.get("pos") == "NOUN"
+            if (pair := gender_pair_for_word(row["lemma"]))
+        )
+    texts = sorted(texts)
     if not config.enabled:
         write_rows(target, [Pronunciation(t, config.language, error="disabled") for t in texts])
         return

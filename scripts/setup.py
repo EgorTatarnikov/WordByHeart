@@ -395,6 +395,7 @@ def main(argv=None):
         require(
             python(
                 "-c",
+                "from src.gui.app import configure_tk_runtime; configure_tk_runtime(); "
                 "import customtkinter as c; r=c.CTk(); r.withdraw(); r.update(); r.destroy()",
                 timeout=30,
                 capture=True,

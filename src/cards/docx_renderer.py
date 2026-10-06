@@ -12,14 +12,12 @@ from docx.shared import Pt
 
 from src.cards.formatter import (
     card_content,
-    english_back_forms,
-    filter_observed_forms_for_back,
-    format_observed_forms,
     get_card_front_text,
     get_forms_font_size,
     get_translation_font_size,
 )
 from src.cards.selector import select_cards
+from src.pronunciation.cyrillic import formatted_cyrillic
 from src.storage import atomic_path, file_hash, read_rows
 
 logger = logging.getLogger(__name__)
@@ -126,6 +124,8 @@ def render(cards, template: Path, target: Path, config, language="es", machine_t
         row, column = divmod(local, config.columns)
         front = tables[sheet].cell(row, column)
         front_text, ipa_text, translations, forms_text = card_content(entry, config.max_forms, language)
+        if language == "es":
+            ipa_text = formatted_cyrillic(entry.ipa) or ipa_text
         if front_text == entry.lemma:
             lemma_fallbacks.append(f"{entry.lemma}/{entry.pos}")
         _write_paragraph(_clear_cell(front), front_text, config.front_font_size, 0)
@@ -202,16 +202,7 @@ def run(
     render_learning_list(cards, list_target, cards_config, language, machine_translation)
     logger.info("Список для изучения: %s", list_target)
     long_forms = sum(
-        len(
-            format_observed_forms(
-                english_back_forms(card, cards_config.max_forms)
-                if language == "en"
-                else filter_observed_forms_for_back(
-                    card.observed_forms, get_card_front_text(card), cards_config.max_forms, True
-                )
-            )
-        )
-        > cards_config.long_forms_threshold
+        len(card_content(card, cards_config.max_forms, language)[3]) > cards_config.long_forms_threshold
         for card in cards
     )
     logger.info(

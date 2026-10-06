@@ -1,0 +1,74 @@
+type	masculine	feminine	masculine_plural	feminine_plural	translation_ru
+different_form	el niño	la niña	los niños	las niñas	мальчик / девочка; ребёнок
+different_form	el chico	la chica	los chicos	las chicas	парень / девушка
+different_form	el hijo	la hija	los hijos	las hijas	сын / дочь
+different_form	el hermano	la hermana	los hermanos	las hermanas	брат / сестра
+different_form	el abuelo	la abuela	los abuelos	las abuelas	дедушка / бабушка
+different_form	el nieto	la nieta	los nietos	las nietas	внук / внучка
+different_form	el tío	la tía	los tíos	las tías	дядя / тётя
+different_form	el primo	la prima	los primos	las primas	двоюродный брат / сестра
+different_form	el sobrino	la sobrina	los sobrinos	las sobrinas	племянник / племянница
+different_form	el novio	la novia	los novios	las novias	парень / девушка; жених / невеста
+different_form	el esposo	la esposa	los esposos	las esposas	супруг / супруга
+different_form	el amigo	la amiga	los amigos	las amigas	друг / подруга
+different_form	el compañero	la compañera	los compañeros	las compañeras	товарищ / товарищка; коллега
+different_form	el vecino	la vecina	los vecinos	las vecinas	сосед / соседка
+different_form	el señor	la señora	los señores	las señoras	господин / госпожа
+different_form	el profesor	la profesora	los profesores	las profesoras	преподаватель / преподавательница
+different_form	el maestro	la maestra	los maestros	las maestras	учитель / учительница
+different_form	el alumno	la alumna	los alumnos	las alumnas	ученик / ученица
+different_form	el médico	la médica	los médicos	las médicas	врач
+different_form	el doctor	la doctora	los doctores	las doctoras	доктор
+different_form	el jefe	la jefa	los jefes	las jefas	начальник / начальница
+different_form	el trabajador	la trabajadora	los trabajadores	las trabajadoras	работник / работница
+different_form	el empleado	la empleada	los empleados	las empleadas	сотрудник / сотрудница
+different_form	el secretario	la secretaria	los secretarios	las secretarias	секретарь
+different_form	el director	la directora	los directores	las directoras	директор
+different_form	el presidente	la presidenta	los presidentes	las presidentas	председатель / председательница; президент
+different_form	el juez	la jueza	los jueces	las juezas	судья
+different_form	el abogado	la abogada	los abogados	las abogadas	адвокат
+different_form	el ingeniero	la ingeniera	los ingenieros	las ingenieras	инженер
+different_form	el ciudadano	la ciudadana	los ciudadanos	las ciudadanas	гражданин / гражданка
+different_form	el dueño	la dueña	los dueños	las dueñas	владелец / владелица
+different_form	el escritor	la escritora	los escritores	las escritoras	писатель / писательница
+different_form	el autor	la autora	los autores	las autoras	автор
+different_form	el actor	la actriz	los actores	las actrices	актёр / актриса
+different_form	el rey	la reina	los reyes	las reinas	король / королева
+different_form	el camarero	la camarera	los camareros	las camareras	официант / официантка
+different_form	el cocinero	la cocinera	los cocineros	las cocineras	повар
+different_form	el vendedor	la vendedora	los vendedores	las vendedoras	продавец / продавщица
+different_form	el perro	la perra	los perros	las perras	пёс / собака
+different_form	el gato	la gata	los gatos	las gatas	кот / кошка
+same_form	el estudiante	la estudiante	los estudiantes	las estudiantes	студент / студентка
+same_form	el artista	la artista	los artistas	las artistas	артист / артистка; художник / художница
+same_form	el periodista	la periodista	los periodistas	las periodistas	журналист / журналистка
+same_form	el cantante	la cantante	los cantantes	las cantantes	певец / певица
+same_form	el turista	la turista	los turistas	las turistas	турист / туристка
+same_form	el dentista	la dentista	los dentistas	las dentistas	стоматолог
+same_form	el especialista	la especialista	los especialistas	las especialistas	специалист
+same_form	el deportista	la deportista	los deportistas	las deportistas	спортсмен / спортсменка
+same_form	el taxista	la taxista	los taxistas	las taxistas	таксист / таксистка
+same_form	el pianista	la pianista	los pianistas	las pianistas	пианист / пианистка
+same_form	el atleta	la atleta	los atletas	las atletas	атлет / атлетка
+same_form	el intérprete	la intérprete	los intérpretes	las intérpretes	переводчик / переводчица; исполнитель
+same_form	el joven	la joven	los jóvenes	las jóvenes	молодой человек / девушка
+same_form	el agente	la agente	los agentes	las agentes	агент
+same_form	el representante	la representante	los representantes	las representantes	представитель / представительница
+same_form	el ayudante	la ayudante	los ayudantes	las ayudantes	помощник / помощница
+same_form	el colega	la colega	los colegas	las colegas	коллега
+same_form	el testigo	la testigo	los testigos	las testigos	свидетель / свидетельница
+same_form	el modelo	la modelo	los modelos	las modelos	модель; человек-модель
+same_form	el guía	la guía	los guías	las guías	гид
+same_form	el policía	la policía	los policías	las policías	полицейский / полицейская
+same_form	el paciente	la paciente	los pacientes	las pacientes	пациент / пациентка
+same_form	el visitante	la visitante	los visitantes	las visitantes	посетитель / посетительница
+same_form	el habitante	la habitante	los habitantes	las habitantes	житель / жительница
+same_form	el participante	la participante	los participantes	las participantes	участник / участница
+same_form	el docente	la docente	los docentes	las docentes	преподаватель / преподавательница
+same_form	el profesional	la profesional	los profesionales	las profesionales	профессионал
+same_form	el rival	la rival	los rivales	las rivales	соперник / соперница
+same_form	el soldado	la soldado	los soldados	las soldados	солдат
+same_form	el guardia	la guardia	los guardias	las guardias	охранник / охранница
+same_form	el ciclista	la ciclista	los ciclistas	las ciclistas	велосипедист / велосипедистка
+same_form	el futbolista	la futbolista	los futbolistas	las futbolistas	футболист / футболистка
+same_form	el espía	la espía	los espías	las espías	шпион / шпионка

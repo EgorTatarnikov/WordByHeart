@@ -52,7 +52,7 @@ def test_no_repeated_work(project):
 @pytest.mark.parametrize(
     "section,key,value,stale",
     [
-        ("pronunciation", "language", "es-419", {"ipa", "validate", "export", "cards"}),
+        ("pronunciation", "language", "es", {"ipa", "validate", "export", "cards"}),
         ("machine_translation", "prompt_version", "2.0", {"translate", "validate", "export", "cards"}),
         ("machine_translation", "enabled", True, {"translate", "validate", "export", "cards"}),
         ("machine_translation", "model", "test-model", {"translate", "validate", "export", "cards"}),

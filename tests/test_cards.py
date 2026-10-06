@@ -34,7 +34,7 @@ def card(rank=1, forms=None):
 
 
 def test_front_text_priority_and_empty_values():
-    assert get_card_front_text(card()) == "la casa / las casas"
+    assert get_card_front_text(card()) == "la casa"
     assert get_card_front_text(replace(card(), grammatical_forms=None)) == "la casa"
     assert get_card_front_text(replace(card(), grammatical_forms="  ", learning_form="")) == "casa"
 
@@ -93,7 +93,7 @@ def test_no_observed_forms_paragraph_and_font_threshold_after_filtering(tmp_path
     no_forms = replace(card(), observed_forms={"casa": 4, "casas": 2})
     render([no_forms], template, target, Cards())
     back = Document(target).tables[1].cell(7, 0)
-    assert [paragraph.text for paragraph in back.paragraphs] == ["/kasa/", "дом", "house"]
+    assert [paragraph.text for paragraph in back.paragraphs] == ["/каса/", "дом", "house", "las casas"]
 
     long_forms = {"a" * 30: 4, "b" * 30: 3, "c" * 30: 2, "d": 1}
     front = " / ".join(["a" * 30, "b" * 30])
@@ -138,10 +138,10 @@ def test_render_uses_template_and_mirrors_back_rows(tmp_path):
     assert render([card(rank=i + 1) for i in range(25)], template, target, Cards()) == 2
     document = Document(target)
     assert len(document.tables) == 4
-    assert document.tables[0].cell(0, 0).text == "la casa / las casas"
-    assert document.tables[3].cell(7, 0).paragraphs[0].text == "/kasa/"
-    assert document.tables[1].cell(0, 0).text == "la casa / las casas"
-    assert document.tables[2].cell(7, 0).paragraphs[0].text == "/kasa/"
+    assert document.tables[0].cell(0, 0).text == "la casa"
+    assert document.tables[3].cell(7, 0).paragraphs[0].text == "/каса/"
+    assert document.tables[1].cell(0, 0).text == "la casa"
+    assert document.tables[2].cell(7, 0).paragraphs[0].text == "/каса/"
     assert not document.tables[1].cell(0, 1).text
     # The final one-point paragraph keeps Word from adding a normal-height line
     # after the last table and spilling it onto a blank page.

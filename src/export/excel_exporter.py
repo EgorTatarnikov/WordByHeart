@@ -10,6 +10,7 @@ from openpyxl.utils import get_column_letter
 from src.export.review import REVIEW_COLUMNS, make_review_rows
 from src.grammar.pos_mapping import POS_RU
 from src.lemma_groups import group_lemmas
+from src.pronunciation.cyrillic import formatted_cyrillic
 from src.storage import atomic_path, read_rows
 
 logger = logging.getLogger(__name__)
@@ -56,10 +57,14 @@ FORM_COLUMNS = [
 ]
 
 
-def make_tables(data):
+def make_tables(data, language="en"):
     lg = {r["id"]: r for r in data["lemma_grammar"]}
     fg = {r["id"]: r for r in data["form_grammar"]}
     ipa = {r["text"]: f"/{r['ipa']}/" if r["ipa"] else "" for r in data["ipa"]}
+    cyrillic = (
+        {r["text"]: formatted_cyrillic(r["ipa"]) for r in data["ipa"]}
+        if language == "es" else {}
+    )
     tr = {r["id"]: r for r in data["translations"]}
     lemma_rows, form_rows = [], []
     groups = group_lemmas(data["lemmas"], data["forms"])
@@ -81,6 +86,7 @@ def make_tables(data):
                 group["specificity"],
                 r["chunk_count"],
                 ipa.get(r["lemma"], ""),
+                *([cyrillic.get(r["lemma"], "")] if language == "es" else []),
                 POS_RU.get(r["pos"], r["pos"]),
                 g["grammatical_gender"],
                 g["grammar_forms"],
@@ -103,6 +109,7 @@ def make_tables(data):
                 r.get("book_relative_frequency", 0.0),
                 r.get("reference_frequency", 0.0),
                 ipa.get(r["form"], ""),
+                *([cyrillic.get(r["form"], "")] if language == "es" else []),
                 r["lemma"],
                 POS_RU.get(r["pos"], r["pos"]),
                 g["morph_description"],
@@ -112,9 +119,14 @@ def make_tables(data):
             ]
         )
     review_rows = make_review_rows(data)
+    lemma_columns = LEMMA_COLUMNS.copy()
+    form_columns = FORM_COLUMNS.copy()
+    if language == "es":
+        for columns in (lemma_columns, form_columns):
+            columns.insert(columns.index("Транскрипция") + 1, "Транскрипция Кириллица")
     return [
-        ("Леммы", LEMMA_COLUMNS, lemma_rows),
-        ("Словоформы", FORM_COLUMNS, form_rows),
+        ("Леммы", lemma_columns, lemma_rows),
+        ("Словоформы", form_columns, form_rows),
         ("Проверка", REVIEW_COLUMNS, review_rows),
     ]
 
@@ -280,7 +292,7 @@ https://spacy.io/
 
 
 def run(paths, output, config, language="es", source_name="", machine_translation=False):
-    tables = make_tables({key: read_rows(path) for key, path in paths.items()})
+    tables = make_tables({key: read_rows(path) for key, path in paths.items()}, language)
     output.mkdir(parents=True, exist_ok=True)
     attribution = make_attribution(source_name, machine_translation)
     description = WORDFREQ_CREDIT

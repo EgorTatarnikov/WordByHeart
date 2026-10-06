@@ -12,3 +12,4 @@ class CardEntry:
     translation_ru: str
     translation_en: str
     observed_forms: dict[str, int]
+    gender_pair: bool = False

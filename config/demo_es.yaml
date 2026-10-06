@@ -9,7 +9,7 @@ nlp:
   chunk_size: 5000
 pronunciation:
   enabled: true
-  language: es
+  language: es-419
 translation:
   cumulative_coverage_limit: 90
   specificity_threshold: 20.0

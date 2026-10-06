@@ -16,7 +16,7 @@ def has_value(value) -> bool:
 
 
 def get_card_front_text(entry) -> str:
-    for value in (entry.grammatical_forms, entry.learning_form, entry.lemma):
+    for value in (entry.learning_form, entry.lemma):
         if has_value(value):
             return str(value).strip()
     return ""
@@ -73,6 +73,24 @@ def format_observed_forms(forms: list[str]) -> str:
     return ", ".join(forms)
 
 
+def spanish_back_forms(entry, max_forms: int = 10) -> str:
+    """Put generated grammar forms first, then remaining forms found in the book."""
+    front = get_card_front_text(entry)
+    seen = {normalize_card_form(front)}
+    generated = []
+    for form in _FRONT_SEPARATORS.split(entry.grammatical_forms or ""):
+        normalized = normalize_card_form(form)
+        if not normalized or normalized in seen:
+            continue
+        generated.append(form.strip())
+        seen.add(normalized)
+    shown = " / ".join([front, *generated])
+    observed = filter_observed_forms_for_back(entry.observed_forms, shown, max_forms, True)
+    separator = ", " if entry.gender_pair else " / "
+    parts = [separator.join(generated), format_observed_forms(observed)]
+    return ", ".join(part for part in parts if part)
+
+
 def english_back_forms(entry, max_forms: int = 10) -> list[str]:
     """Return generated and observed English forms for a card back."""
     front = normalize_card_form(entry.learning_form or entry.lemma)
@@ -99,12 +117,11 @@ def get_translation_font_size(text: str, normal_size: int, threshold: int, reduc
 def card_content(entry, max_forms=10, language="es"):
     """Shared visible content for printable cards and the learning spreadsheet."""
     front = entry.learning_form.strip() or entry.lemma if language == "en" else get_card_front_text(entry)
-    forms = (
-        english_back_forms(entry, max_forms)
-        if language == "en"
-        else filter_observed_forms_for_back(entry.observed_forms, front, max_forms, True)
-    )
     translations = [entry.translation_ru]
     if language == "es":
         translations.append(entry.translation_en)
-    return front, f"/{entry.ipa}/", translations, format_observed_forms(forms)
+    forms = (
+        format_observed_forms(english_back_forms(entry, max_forms))
+        if language == "en" else spanish_back_forms(entry, max_forms)
+    )
+    return front, f"/{entry.ipa}/", translations, forms
